@@ -1,0 +1,39 @@
+# Python
+.venv/
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.Python
+
+# Testy i cache
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Logi
+*.log
+
+# Srodowiska
+.env
+.env.*
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+Thumbs.db
+desktop.ini
+.DS_Store
+
+# Wyniki scrapowania
+*.csv
+*.json
+*.xlsx
+# *.db – mieszkania.db jest sledzone przez git (DB persistence w GitHub Actions)
+*.db
+!mieszkania.db
+
+# PDF (generowane)
+*.pdf

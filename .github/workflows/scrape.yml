@@ -1,0 +1,69 @@
+name: Scraper mieszkan Berlin
+
+on:
+  # Uruchamiaj co 30 minut (GitHub Actions nie gwarantuje dokladnej minuty)
+  schedule:
+    - cron: "*/30 * * * *"
+  # Reczne uruchomienie z GitHub UI (Actions -> Run workflow)
+  workflow_dispatch:
+    inputs:
+      min_rooms:
+        description: "Minimalna liczba pokoi"
+        required: false
+        default: "5"
+
+# Tylko jedno uruchomienie naraz - zapobiega rownoleglym scraingom
+concurrency:
+  group: scraper
+  cancel-in-progress: false
+
+jobs:
+  scrape:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: write   # potrzebne do git push (commit DB)
+
+    steps:
+      - name: Checkout kodu
+        uses: actions/checkout@v4
+        with:
+          # Pobierz pelna historie, zeby git push dzialal poprawnie
+          fetch-depth: 1
+
+      - name: Ustaw Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: "pip"
+
+      - name: Zainstaluj zaleznosci
+        run: pip install -r requirements.txt
+
+      - name: Zainstaluj Playwright Chromium
+        run: playwright install chromium --with-deps
+
+      - name: Uruchom scraper
+        env:
+          NOTIFY_SMTP_HOST: ${{ secrets.NOTIFY_SMTP_HOST }}
+          NOTIFY_SMTP_PORT: ${{ secrets.NOTIFY_SMTP_PORT }}
+          NOTIFY_SMTP_USER: ${{ secrets.NOTIFY_SMTP_USER }}
+          NOTIFY_SMTP_PASSWORD: ${{ secrets.NOTIFY_SMTP_PASSWORD }}
+          NOTIFY_TO: ${{ secrets.NOTIFY_TO }}
+        run: |
+          MIN_ROOMS="${{ github.event.inputs.min_rooms || '5' }}"
+          python main.py "$MIN_ROOMS"
+
+      - name: Statystyki bazy
+        if: always()
+        run: python -c "import db; db.init_db(); db.print_stats()"
+
+      # Commituj zaktualizowana baze danych z powrotem do repo
+      - name: Zapisz DB do repo
+        if: always()
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add mieszkania.db
+          git diff --staged --quiet || git commit -m "chore: update DB [skip ci]"
+          git push
