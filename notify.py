@@ -19,17 +19,20 @@ from models import Apartment
 
 load_dotenv()
 
-SMTP_HOST = os.environ.get("NOTIFY_SMTP_HOST", "smtp.gmail.com")
-# SMTP_PORT = int(os.environ.get("NOTIFY_SMTP_PORT", "587"))
-SMTP_PORT = os.environ.get("NOTIFY_SMTP_PORT", "587")
-SMTP_USER = os.environ.get("NOTIFY_SMTP_USER", "")
-SMTP_PASS = os.environ.get("NOTIFY_SMTP_PASSWORD", "")
-NOTIFY_TO = os.environ.get("NOTIFY_TO", "")
+# SMTP_HOST = os.environ.get("NOTIFY_SMTP_HOST", "smtp.gmail.com")
+# SMTP_PORT = os.environ.get("NOTIFY_SMTP_PORT", "587")
+# SMTP_USER = os.environ.get("NOTIFY_SMTP_USER", "")
+# SMTP_PASS = os.environ.get("NOTIFY_SMTP_PASSWORD", "")
+# NOTIFY_TO = os.environ.get("NOTIFY_TO", "")
+SMTP_HOST = {{ secrets.SMTP_HOST }}
+SMTP_PORT = {{ secrets.SMTP_PORT }}
+SMTP_USER = {{ secrets.SMTP_USER }}
+SMTP_PASS = {{ secrets.SMTP_PASS }}
+NOTIFY_TO = {{ secrets.NOTIFY_TO }}
+
 
 
 def _is_configured() -> bool:
-    print(os.environ.get("NOTIFY_SMTP_USER"))
-    print(os.environ.get("NOTIFY_SMTP_TO"))
     return bool(SMTP_USER and SMTP_PASS and NOTIFY_TO)
 
 
