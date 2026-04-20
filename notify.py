@@ -196,7 +196,8 @@ def send(new_apts: list[Apartment]) -> bool:
         with smtplib.SMTP(SMTP_HOST, SMTP_PORT) as server:
             server.ehlo()
             server.starttls()
-            server.connect(SMTP_HOST, SMTP_PORT)
+            server.ehlo()
+            # server.connect(SMTP_HOST, SMTP_PORT)
             server.login(SMTP_USER, SMTP_PASS)
             server.sendmail(SMTP_USER, recipients, msg.as_string())
         print(f"  [notify] Email wyslany do: {', '.join(recipients)} ({count} ofert)")
