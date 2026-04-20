@@ -20,7 +20,7 @@ from models import Apartment
 load_dotenv()
 
 SMTP_HOST = os.environ.get("NOTIFY_SMTP_HOST", "smtp.gmail.com")
-SMTP_PORT = int(os.environ.get("NOTIFY_SMTP_PORT", "587"))
+# SMTP_PORT = int(os.environ.get("NOTIFY_SMTP_PORT", "587"))
 SMTP_PORT = os.environ.get("NOTIFY_SMTP_PORT", "587")
 SMTP_USER = os.environ.get("NOTIFY_SMTP_USER", "")
 SMTP_PASS = os.environ.get("NOTIFY_SMTP_PASSWORD", "")
