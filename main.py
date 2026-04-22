@@ -204,7 +204,7 @@ def main(min_rooms: float = MIN_ROOMS) -> None:
 
 if __name__ == "__main__":
     import argparse
-    parser = argparse.ArgumentParser(description="Wyszukiwarka mieszkan Berlin")
+    parser = argparse.ArgumentParser(description="Wyszukiwarka mieszkań Berlin")
     parser.add_argument(
         "min_rooms",
         nargs="?",
@@ -215,7 +215,7 @@ if __name__ == "__main__":
     parser.add_argument(
         "--daily-summary",
         action="store_true",
-        help="Wyslij dzienny raport zamiast uruchamiac scrapery",
+        help="Wyślij dzienny raport zamiast uruchamiać scrapery",
     )
     args = parser.parse_args()
 

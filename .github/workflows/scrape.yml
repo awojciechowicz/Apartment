@@ -1,10 +1,10 @@
 name: Scraper mieszkan Berlin
 
 on:
-  # Co 30 min od 7:00 do 19:30 czasu niemieckiego (CEST = UTC+2 -> 5:00-17:30 UTC)
+  # Co godzinę
   schedule:
     - cron: "0 * * * *"
-  # Dzienny raport zbiorczy o 20:00 CEST (18:00 UTC)
+  # Dzienny raport zbiorczy o 19:30 CEST (17:30 UTC)
     - cron: "30 17 * * *"
   # Reczne uruchomienie z GitHub UI (Actions -> Run workflow)
   workflow_dispatch:
