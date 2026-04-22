@@ -226,6 +226,23 @@ def query_apartments(
         return conn.execute(sql, params).fetchall()
 
 
+def query_today_new(min_rooms: float = 1.0) -> list[sqlite3.Row]:
+    """
+    Zwraca wszystkie oferty po raz pierwszy zobaczone dzisiaj (UTC).
+    Uzywane do dziennego raportu.
+    """
+    today = datetime.now(timezone.utc).date().isoformat()  # np. '2026-04-22'
+    with _connect() as conn:
+        return conn.execute(
+            """
+            SELECT * FROM apartments
+            WHERE first_seen_at >= ?
+            ORDER BY source, wbs_required, rooms DESC, warm_rent
+            """,
+            (today,),
+        ).fetchall()
+
+
 def print_stats() -> None:
     """Wyswietla statystyki bazy."""
     with _connect() as conn:
