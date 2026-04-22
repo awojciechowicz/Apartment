@@ -1,9 +1,9 @@
 name: Scraper mieszkan Berlin
 
 on:
-  # Uruchamiaj co godzine (GitHub Actions nie gwarantuje dokladnej minuty)
+  # Uruchamiaj co 30 minut (GitHub Actions nie gwarantuje dokladnej minuty)
   schedule:
-    - cron: "0 * * * *"
+    - cron: "0,30 5-17 * * *"
   # Reczne uruchomienie z GitHub UI (Actions -> Run workflow)
   workflow_dispatch:
     inputs:
