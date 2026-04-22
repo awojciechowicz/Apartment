@@ -1,9 +1,11 @@
 name: Scraper mieszkan Berlin
 
 on:
-  # Uruchamiaj co godzinę (GitHub Actions nie gwarantuje dokladnej minuty)
+  # Co 30 min od 7:00 do 19:30 czasu niemieckiego (CEST = UTC+2 -> 5:00-17:30 UTC)
   schedule:
     - cron: "0 * * * *"
+  # Dzienny raport zbiorczy o 20:00 CEST (18:00 UTC)
+    - cron: "30 17 * * *"
   # Reczne uruchomienie z GitHub UI (Actions -> Run workflow)
   workflow_dispatch:
     inputs:
@@ -11,6 +13,10 @@ on:
         description: "Minimalna liczba pokoi"
         required: false
         default: "5"
+      daily_summary:
+        description: "Wyslij dzienny raport zbiorczy (wszystkie nowe oferty z dzisiaj)"
+        required: false
+        default: "false"
 
 # Tylko jedno uruchomienie naraz - zapobiega rownoleglym scraingom
 concurrency:
@@ -52,7 +58,15 @@ jobs:
           NOTIFY_TO: ${{ secrets.NOTIFY_TO }}
         run: |
           MIN_ROOMS="${{ github.event.inputs.min_rooms || '5' }}"
-          python main.py "$MIN_ROOMS"
+          DAILY="${{ github.event.inputs.daily_summary || 'false' }}"
+          # Dzienny raport: trigger 'cron 30 17' (19:30 CEST) lub reczny z flaga
+          if [ "${{ github.event.schedule }}" = "30 17 * * *" ] || [ "$DAILY" = "true" ]; then
+            echo "Tryb: dzienny raport zbiorczy"
+            python main.py "$MIN_ROOMS" --daily-summary
+          else
+            echo "Tryb: normalny scrape"
+            python main.py "$MIN_ROOMS"
+          fi
 
       - name: Statystyki bazy
         if: always()

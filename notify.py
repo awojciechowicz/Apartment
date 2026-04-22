@@ -11,20 +11,17 @@ Konfiguracja przez zmienne srodowiskowe (plik .env):
 
 import os
 import smtplib
+import sqlite3
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
-from dotenv import load_dotenv
 
 from models import Apartment
 
-load_dotenv()
-
 SMTP_HOST = os.environ.get("NOTIFY_SMTP_HOST", "smtp.gmail.com")
-SMTP_PORT = os.environ.get("NOTIFY_SMTP_PORT", "587")
+SMTP_PORT = int(os.environ.get("NOTIFY_SMTP_PORT", "587"))
 SMTP_USER = os.environ.get("NOTIFY_SMTP_USER", "")
 SMTP_PASS = os.environ.get("NOTIFY_SMTP_PASSWORD", "")
 NOTIFY_TO = os.environ.get("NOTIFY_TO", "")
-
 
 
 def _is_configured() -> bool:
@@ -192,14 +189,123 @@ def send(new_apts: list[Apartment]) -> bool:
 
     try:
         with smtplib.SMTP(SMTP_HOST, SMTP_PORT) as server:
-            server.connect(SMTP_HOST, SMTP_PORT)
             server.ehlo()
             server.starttls()
-            server.ehlo()
             server.login(SMTP_USER, SMTP_PASS)
             server.sendmail(SMTP_USER, recipients, msg.as_string())
         print(f"  [notify] Email wyslany do: {', '.join(recipients)} ({count} ofert)")
         return True
     except Exception as exc:
         print(f"  [notify] BLAD wysylania emaila: {exc}")
+        return False
+
+
+def send_daily_summary(rows: list[sqlite3.Row]) -> bool:
+    """
+    Wysyla dzienny raport z WSZYSTKIMI ofertami dodanymi dzisiaj.
+    rows: lista sqlite3.Row z tabeli apartments (wynik query_today_new()).
+    """
+    if not rows:
+        print("  [notify] Dzienny raport: brak nowych ofert dzisiaj.")
+        return False
+
+    if not _is_configured():
+        print("  [notify] Pominieto - brak konfiguracji SMTP")
+        return False
+
+    # Konwertuj Row -> Apartment
+    apts: list[Apartment] = []
+    for r in rows:
+        apts.append(Apartment(
+            url=r["url"],
+            source=r["source"],
+            title=r["title"],
+            address=r["address"] or "",
+            district=r["district"],
+            rooms=r["rooms"],
+            area_m2=r["area_m2"],
+            warm_rent=r["warm_rent"],
+            cold_rent=r["cold_rent"],
+            available_from=r["available_from"],
+            wbs_required=bool(r["wbs_required"]),
+            wbs_type=r["wbs_type"],
+        ))
+
+    recipients = [r.strip() for r in NOTIFY_TO.split(",") if r.strip()]
+    count = len(apts)
+    subject = f"Berlin dzienny raport: {count} nowych ofert mieszkan"
+
+    msg = MIMEMultipart("alternative")
+    msg["Subject"] = subject
+    msg["From"] = SMTP_USER
+    msg["To"] = ", ".join(recipients)
+
+    without_wbs = [a for a in apts if not a.wbs_required]
+    with_wbs    = [a for a in apts if a.wbs_required]
+
+    text_lines = [f"Dzienny raport mieszkan Berlin ({count} nowych dzisiaj)\n"]
+    if without_wbs:
+        text_lines.append(f"== BEZ WBS ({len(without_wbs)}) ==\n")
+        for apt in without_wbs:
+            rent = f"{apt.warm_rent:.0f} EUR" if apt.warm_rent else "?"
+            text_lines.append(
+                f"[{apt.source.upper()}] {apt.rooms or '?'} pok. | {apt.area_m2 or '?'} m2 | {rent}\n"
+                f"{apt.title or apt.address}\n{apt.url}\n"
+            )
+    if with_wbs:
+        text_lines.append(f"\n== WYMAGANY WBS ({len(with_wbs)}) ==\n")
+        for apt in with_wbs:
+            rent = f"{apt.warm_rent:.0f} EUR" if apt.warm_rent else "?"
+            wbs = f"WBS: {apt.wbs_type}" if apt.wbs_type else "WBS"
+            text_lines.append(
+                f"[{apt.source.upper()}] {apt.rooms or '?'} pok. | {apt.area_m2 or '?'} m2 | {rent} | {wbs}\n"
+                f"{apt.title or apt.address}\n{apt.url}\n"
+            )
+
+    # Buduj HTML z naglowkiem 'Dzienny raport'
+    sections = ""
+    if without_wbs:
+        sections += _section_table(without_wbs, "Bez WBS", "#27ae60")
+    if with_wbs:
+        sections += _section_table(with_wbs, "Wymagany WBS", "#e74c3c")
+
+    html = f"""<!DOCTYPE html>
+<html>
+<head><meta charset="utf-8"></head>
+<body style="font-family:Arial,sans-serif;background:#f5f5f5;margin:0;padding:20px;">
+  <div style="max-width:900px;margin:auto;background:#fff;border-radius:8px;
+    box-shadow:0 2px 8px rgba(0,0,0,.1);overflow:hidden;">
+    <div style="background:#1a252f;color:#fff;padding:20px 30px;">
+      <h1 style="margin:0;font-size:20px;">Dzienny raport mieszkan Berlin</h1>
+      <p style="margin:8px 0 0;opacity:.8;font-size:13px;">
+        Dzisiaj dodano {count} nowych ofert
+        &nbsp;&nbsp;|&nbsp;&nbsp;
+        <span style="color:#2ecc71;">bez WBS: {len(without_wbs)}</span>
+        &nbsp;&nbsp;
+        <span style="color:#e74c3c;">z WBS: {len(with_wbs)}</span>
+      </p>
+    </div>
+    <div style="padding:20px 30px;">
+      {sections}
+    </div>
+    <div style="background:#ecf0f1;padding:12px 30px;font-size:11px;color:#999;">
+      Wiadomosc wygenerowana automatycznie &mdash; raport dzienny 20:00 CEST.
+    </div>
+  </div>
+</body>
+</html>"""
+
+    msg.attach(MIMEText("\n".join(text_lines), "plain", "utf-8"))
+    msg.attach(MIMEText(html, "html", "utf-8"))
+
+    try:
+        with smtplib.SMTP(SMTP_HOST, SMTP_PORT) as server:
+            server.ehlo()
+            server.starttls()
+            server.login(SMTP_USER, SMTP_PASS)
+            server.sendmail(SMTP_USER, recipients, msg.as_string())
+        print(f"  [notify] Dzienny raport wyslany do: {', '.join(recipients)} ({count} ofert)")
+        return True
+    except Exception as exc:
+        print(f"  [notify] BLAD wysylania dziennego raportu: {exc}")
         return False

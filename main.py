@@ -53,9 +53,12 @@ def _run_scraper(name: str, fn: Callable, min_rooms: float) -> tuple[str, list[A
 
         db.finish_run(run_id, len(all_apts), len(new_apts), upd_cnt, rem_cnt)
 
-        # Filtruj do wyswietlenia
-        results = [a for a in all_apts if (a.rooms or 0) >= min_rooms]
-        print(f"  [{name}] OK - {len(all_apts)} ofert ({len(results)} >= {min_rooms:.0f} pok.) "
+        # Filtruj do wyswietlenia: >= min_rooms LUB jakikolwiek WBS
+        results = [a for a in all_apts if (a.rooms or 0) >= min_rooms or a.wbs_required]
+        wbs_count = sum(1 for a in results if a.wbs_required)
+        non_wbs_count = sum(1 for a in results if not a.wbs_required)
+        print(f"  [{name}] OK - {len(all_apts)} ofert "
+              f"({non_wbs_count} bez WBS >= {min_rooms:.0f} pok. | {wbs_count} z WBS dowolna liczba pokoi) "
               f"| baza: +{len(new_apts)} nowych, ~{upd_cnt} zmian, -{rem_cnt} usunietych ({elapsed:.1f}s)")
         return name, results, None, new_apts
     except Exception as exc:
@@ -84,7 +87,7 @@ def print_apartment(apt: Apartment) -> None:
 def main(min_rooms: float = MIN_ROOMS) -> None:
     db.init_db()
 
-    print(f"Wyszukiwanie nowych mieszkan >= {min_rooms:.0f} pokoi w Berlinie")
+    print(f"Wyszukiwanie mieszkan >= {min_rooms:.0f} pokoi w Berlinie")
     print(f"Zrodla: degewo.de, gewobag.de, wbm.de, howoge.de, inberlinwohnen.de")
     print("=" * 62)
 
@@ -136,19 +139,23 @@ def main(min_rooms: float = MIN_ROOMS) -> None:
             if err:
                 errors[name] = err
 
-    # Wyslij email jesli sa nowe oferty
-
-    if all_new_apts:
-        print(f"\n  Wyslij powiadomienie o {len(all_new_apts)} nowych ofertach...")
-        notify.send(all_new_apts)
+    # Wyslij email tylko dla nowych ofert >= min_rooms pokoi (niezaleznie od WBS)
+    notif_apts = [a for a in all_new_apts if (a.rooms or 0) >= min_rooms]
+    if notif_apts:
+        print(f"\n  Wyslij powiadomienie o {len(notif_apts)} nowych ofertach >= {min_rooms:.0f} pok. "
+              f"({sum(1 for a in notif_apts if not a.wbs_required)} bez WBS "
+              f"+ {sum(1 for a in notif_apts if a.wbs_required)} z WBS)...")
+        notify.send(notif_apts)
 
     elapsed_all = time.time() - start_all
     print(f"\nLacznie: {elapsed_all:.1f}s\n")
 
     # Wyswietl wyniki
     total = sum(len(v) for v in all_results.values())
+    total_no_wbs  = sum(1 for v in all_results.values() for a in v if not a.wbs_required)
+    total_yes_wbs = sum(1 for v in all_results.values() for a in v if a.wbs_required)
     print(f"{'='*62}")
-    print(f"WYNIKI: {total} mieszkan >= {min_rooms:.0f} pokoi")
+    print(f"WYNIKI: {total_no_wbs} bez WBS (>= {min_rooms:.0f} pok.) + {total_yes_wbs} z WBS (dowolna l. pok.) = {total} lacznie")
     print(f"{'='*62}")
 
     for source in ["degewo", "gewobag", "wbm", "howoge", "inberlinwohnen"]:
@@ -183,9 +190,9 @@ def main(min_rooms: float = MIN_ROOMS) -> None:
         yes_wbs = [a for a in all_apts if a.wbs_required]
         print(f"\n{'='*62}")
         print(f"PODSUMOWANIE:")
-        print(f"  Bez WBS:       {len(no_wbs)}")
-        print(f"  Z WBS:         {len(yes_wbs)}")
-        print(f"  Razem:         {total}")
+        print(f"  Bez WBS (>= {min_rooms:.0f} pok.):  {len(no_wbs)}")
+        print(f"  Z WBS (dowolna l. pok.):  {len(yes_wbs)}")
+        print(f"  Razem:                    {total}")
         if errors:
             print(f"  Bledy scraperow: {', '.join(errors.keys())}")
 
@@ -196,11 +203,26 @@ def main(min_rooms: float = MIN_ROOMS) -> None:
 
 
 if __name__ == "__main__":
-    # Opcjonalny argument: minimalna liczba pokoi
-    rooms_arg = MIN_ROOMS
-    if len(sys.argv) > 1:
-        try:
-            rooms_arg = float(sys.argv[1])
-        except ValueError:
-            print(f"Nieprawidlowy argument: {sys.argv[1]}. Uzywam domyslnego {MIN_ROOMS}.")
-    main(min_rooms=rooms_arg)
+    import argparse
+    parser = argparse.ArgumentParser(description="Wyszukiwarka mieszkan Berlin")
+    parser.add_argument(
+        "min_rooms",
+        nargs="?",
+        type=float,
+        default=MIN_ROOMS,
+        help=f"Minimalna liczba pokoi (domyslnie {MIN_ROOMS})",
+    )
+    parser.add_argument(
+        "--daily-summary",
+        action="store_true",
+        help="Wyslij dzienny raport zamiast uruchamiac scrapery",
+    )
+    args = parser.parse_args()
+
+    if args.daily_summary:
+        db.init_db()
+        rows = db.query_today_new()
+        print(f"[daily-summary] Znaleziono {len(rows)} ofert dodanych dzisiaj.")
+        notify.send_daily_summary(rows)
+    else:
+        main(min_rooms=args.min_rooms)
