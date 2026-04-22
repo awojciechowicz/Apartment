@@ -87,11 +87,11 @@ def _section_table(apts: list[Apartment], title: str, header_color: str) -> str:
       <table style="width:100%;border-collapse:collapse;font-size:13px;margin-bottom:8px;">
         <thead>
           <tr style="background:#ecf0f1;">
-            <th style="padding:8px;text-align:left;">Zrodlo</th>
+            <th style="padding:8px;text-align:left;">Źródło</th>
             <th style="padding:8px;text-align:left;">Oferta</th>
             <th style="padding:8px;text-align:left;">Dzielnica</th>
             <th style="padding:8px;text-align:center;">Pok.</th>
-            <th style="padding:8px;text-align:center;">Metraz</th>
+            <th style="padding:8px;text-align:center;">Metraż</th>
             <th style="padding:8px;text-align:center;">Czynsz</th>
             <th style="padding:8px;text-align:left;">WBS</th>
             <th style="padding:8px;text-align:left;">Wolne od</th>
@@ -119,7 +119,7 @@ def _build_html(new_apts: list[Apartment]) -> str:
   <div style="max-width:900px;margin:auto;background:#fff;border-radius:8px;
     box-shadow:0 2px 8px rgba(0,0,0,.1);overflow:hidden;">
     <div style="background:#2c3e50;color:#fff;padding:20px 30px;">
-      <h1 style="margin:0;font-size:20px;">Nowe oferty mieszkan w Berlinie</h1>
+      <h1 style="margin:0;font-size:20px;">Nowe oferty mieszkań w Berlinie</h1>
       <p style="margin:8px 0 0;opacity:.8;font-size:13px;">
         Znaleziono {len(new_apts)} nowych ofert &mdash; degewo / gewobag / wbm / howoge
         &nbsp;&nbsp;|&nbsp;&nbsp;
@@ -132,7 +132,7 @@ def _build_html(new_apts: list[Apartment]) -> str:
       {sections}
     </div>
     <div style="background:#ecf0f1;padding:12px 30px;font-size:11px;color:#999;">
-      Wiadomosc wygenerowana automatycznie przez wyszukiwarke mieszkan Berlin.
+      Wiadomość wygenerowana automatycznie przez wyszukiwarkę mieszkań Berlin.
     </div>
   </div>
 </body>
@@ -148,12 +148,12 @@ def send(new_apts: list[Apartment]) -> bool:
         return False
 
     if not _is_configured():
-        print("  [notify] Pominieto - brak konfiguracji SMTP (NOTIFY_SMTP_USER/PASSWORD/TO)")
+        print("  [notify] Pominięto - brak konfiguracji SMTP (NOTIFY_SMTP_USER/PASSWORD/TO)")
         return False
 
     recipients = [r.strip() for r in NOTIFY_TO.split(",") if r.strip()]
     count = len(new_apts)
-    subject = f"Berlin: {count} nowa oferta mieszkania" if count == 1 else f"Berlin: {count} nowe oferty mieszkan"
+    subject = f"Berlin: {count} nowa oferta mieszkania" if count == 1 else f"Berlin: {count} nowe oferty mieszkań"
 
     msg = MIMEMultipart("alternative")
     msg["Subject"] = subject
@@ -164,7 +164,7 @@ def send(new_apts: list[Apartment]) -> bool:
     without_wbs = [a for a in new_apts if not a.wbs_required]
     with_wbs    = [a for a in new_apts if a.wbs_required]
 
-    text_lines = [f"Nowe oferty mieszkan w Berlinie ({count})\n"]
+    text_lines = [f"Nowe oferty mieszkań w Berlinie ({count})\n"]
 
     if without_wbs:
         text_lines.append(f"== BEZ WBS ({len(without_wbs)}) ==\n")
@@ -196,7 +196,7 @@ def send(new_apts: list[Apartment]) -> bool:
         print(f"  [notify] Email wyslany do: {', '.join(recipients)} ({count} ofert)")
         return True
     except Exception as exc:
-        print(f"  [notify] BLAD wysylania emaila: {exc}")
+        print(f"  [notify] BŁĄD wysyłania emaila: {exc}")
         return False
 
 
@@ -210,7 +210,7 @@ def send_daily_summary(rows: list[sqlite3.Row]) -> bool:
         return False
 
     if not _is_configured():
-        print("  [notify] Pominieto - brak konfiguracji SMTP")
+        print("  [notify] Pominięto - brak konfiguracji SMTP")
         return False
 
     # Konwertuj Row -> Apartment
@@ -233,7 +233,7 @@ def send_daily_summary(rows: list[sqlite3.Row]) -> bool:
 
     recipients = [r.strip() for r in NOTIFY_TO.split(",") if r.strip()]
     count = len(apts)
-    subject = f"Berlin dzienny raport: {count} nowych ofert mieszkan"
+    subject = f"Berlin dzienny raport: {count} nowych ofert mieszkań"
 
     msg = MIMEMultipart("alternative")
     msg["Subject"] = subject
@@ -276,7 +276,7 @@ def send_daily_summary(rows: list[sqlite3.Row]) -> bool:
   <div style="max-width:900px;margin:auto;background:#fff;border-radius:8px;
     box-shadow:0 2px 8px rgba(0,0,0,.1);overflow:hidden;">
     <div style="background:#1a252f;color:#fff;padding:20px 30px;">
-      <h1 style="margin:0;font-size:20px;">Dzienny raport mieszkan Berlin</h1>
+      <h1 style="margin:0;font-size:20px;">Dzienny raport mieszkań Berlin</h1>
       <p style="margin:8px 0 0;opacity:.8;font-size:13px;">
         Dzisiaj dodano {count} nowych ofert
         &nbsp;&nbsp;|&nbsp;&nbsp;
@@ -289,7 +289,7 @@ def send_daily_summary(rows: list[sqlite3.Row]) -> bool:
       {sections}
     </div>
     <div style="background:#ecf0f1;padding:12px 30px;font-size:11px;color:#999;">
-      Wiadomosc wygenerowana automatycznie &mdash; raport dzienny 20:00 CEST.
+      Wiadomosc wygenerowana automatycznie &mdash; raport dzienny 19:30 CEST.
     </div>
   </div>
 </body>
