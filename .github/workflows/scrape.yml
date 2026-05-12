@@ -12,7 +12,7 @@ on:
       min_rooms:
         description: "Minimalna liczba pokoi"
         required: false
-        default: "5"
+        default: "4"
       daily_summary:
         description: "Wyslij dzienny raport zbiorczy (wszystkie nowe oferty z dzisiaj)"
         required: false
