@@ -9,7 +9,7 @@ Schemat:
 import json
 import os
 import sqlite3
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 from models import Apartment
@@ -224,6 +224,71 @@ def query_apartments(
 
     with _connect() as conn:
         return conn.execute(sql, params).fetchall()
+
+
+def query_today_new(min_rooms: float = 1.0) -> list[sqlite3.Row]:
+    """
+    Zwraca wszystkie oferty po raz pierwszy zobaczone dzisiaj (UTC).
+    Uzywane do dziennego raportu.
+    """
+    today = datetime.now(timezone.utc).date().isoformat()  # np. '2026-04-22'
+    with _connect() as conn:
+        return conn.execute(
+            """
+            SELECT * FROM apartments
+            WHERE first_seen_at >= ?
+            ORDER BY source, wbs_required, rooms DESC, warm_rent
+            """,
+            (today,),
+        ).fetchall()
+
+
+def query_stale_sources(days: int = 3) -> list[dict]:
+    """
+    Zwraca liste zrodel, z ktorych od wiecej niz `days` dni nie pojawila sie zadna nowa oferta.
+
+    Sprawdza MAX(first_seen_at) per source w tabeli apartments.
+    Jesli ostatnia nowa oferta z danego zrodla zostala dodana wiecej niz `days` dni temu,
+    zrodlo jest traktowane jako potencjalnie niedziajace i pojawia sie w zwroconej liscie.
+
+    Args:
+        days: prog w dniach (domyslnie 3)
+
+    Returns:
+        Lista slownikow posortowana wg days_ago malejaco:
+        [{"source": str, "last_new": str (YYYY-MM-DD), "days_ago": int}, ...]
+    """
+    cutoff = (datetime.now(timezone.utc) - timedelta(days=days)).isoformat()
+    now = datetime.now(timezone.utc)
+
+    with _connect() as conn:
+        rows = conn.execute(
+            """
+            SELECT source, MAX(first_seen_at) AS last_new
+            FROM apartments
+            GROUP BY source
+            HAVING last_new < ?
+            """,
+            (cutoff,),
+        ).fetchall()
+
+    result = []
+    for row in rows:
+        last_new = row["last_new"]
+        try:
+            last_dt = datetime.fromisoformat(last_new)
+            if last_dt.tzinfo is None:
+                last_dt = last_dt.replace(tzinfo=timezone.utc)
+            days_ago = (now - last_dt).days
+        except Exception:
+            days_ago = days + 1
+        result.append({
+            "source": row["source"],
+            "last_new": last_new[:10] if last_new else "brak",
+            "days_ago": days_ago,
+        })
+
+    return sorted(result, key=lambda x: x["days_ago"], reverse=True)
 
 
 def print_stats() -> None:

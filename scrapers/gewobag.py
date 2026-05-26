@@ -29,7 +29,7 @@ HEADERS = {
     "Accept": "application/json",
 }
 OBJEKTTYP_WOHNUNG = "objekttyp-wohnung"
-MIN_ROOMS = 5
+MIN_ROOMS = 4
 DETAIL_CONCURRENCY = 3    # rownoleglose kart Playwright
 DELAY_BETWEEN_PAGES = 0.5  # sekundy opoznienia miedzy stronami API
 
