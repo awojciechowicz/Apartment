@@ -135,12 +135,12 @@ def _parse_page(soup: BeautifulSoup) -> list[Apartment]:
     return apartments
 
 
-def scrape(min_rooms: float = 5.0) -> list[Apartment]:
+def scrape(min_rooms: float = 4.0) -> list[Apartment]:
     """
     Pobiera wszystkie mieszkania z wbm.de i filtruje po liczbie pokoi.
 
     Args:
-        min_rooms: Minimalna liczba pokoi (domyślnie 5).
+        min_rooms: Minimalna liczba pokoi (domyślnie 4).
 
     Returns:
         Lista obiektów Apartment.
@@ -188,7 +188,7 @@ if __name__ == "__main__":
 
     print()
     big = [a for a in all_apts if a.rooms >= 5]
-    print(f"Mieszkania >= 5 pokoi: {len(big)}")
+    print(f"Mieszkania >= 4 pokoi: {len(big)}")
     for apt in big:
         wbs_info = f" [WBS: {apt.wbs_type}]" if apt.wbs_required else " [bez WBS]"
         print(f"  ** {apt.rooms:.0f} pok. | {apt.area_m2} m² | {apt.warm_rent} € | {apt.title}{wbs_info}")

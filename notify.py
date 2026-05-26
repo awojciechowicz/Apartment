@@ -87,11 +87,11 @@ def _section_table(apts: list[Apartment], title: str, header_color: str) -> str:
       <table style="width:100%;border-collapse:collapse;font-size:13px;margin-bottom:8px;">
         <thead>
           <tr style="background:#ecf0f1;">
-            <th style="padding:8px;text-align:left;">Źródło</th>
+            <th style="padding:8px;text-align:left;">Zrodlo</th>
             <th style="padding:8px;text-align:left;">Oferta</th>
             <th style="padding:8px;text-align:left;">Dzielnica</th>
             <th style="padding:8px;text-align:center;">Pok.</th>
-            <th style="padding:8px;text-align:center;">Metraż</th>
+            <th style="padding:8px;text-align:center;">Metraz</th>
             <th style="padding:8px;text-align:center;">Czynsz</th>
             <th style="padding:8px;text-align:left;">WBS</th>
             <th style="padding:8px;text-align:left;">Wolne od</th>
@@ -119,7 +119,7 @@ def _build_html(new_apts: list[Apartment]) -> str:
   <div style="max-width:900px;margin:auto;background:#fff;border-radius:8px;
     box-shadow:0 2px 8px rgba(0,0,0,.1);overflow:hidden;">
     <div style="background:#2c3e50;color:#fff;padding:20px 30px;">
-      <h1 style="margin:0;font-size:20px;">Nowe oferty mieszkań w Berlinie</h1>
+      <h1 style="margin:0;font-size:20px;">Nowe oferty mieszkan w Berlinie</h1>
       <p style="margin:8px 0 0;opacity:.8;font-size:13px;">
         Znaleziono {len(new_apts)} nowych ofert &mdash; degewo / gewobag / wbm / howoge
         &nbsp;&nbsp;|&nbsp;&nbsp;
@@ -132,7 +132,7 @@ def _build_html(new_apts: list[Apartment]) -> str:
       {sections}
     </div>
     <div style="background:#ecf0f1;padding:12px 30px;font-size:11px;color:#999;">
-      Wiadomość wygenerowana automatycznie przez wyszukiwarkę mieszkań Berlin.
+      Wiadomosc wygenerowana automatycznie przez wyszukiwarke mieszkan Berlin.
     </div>
   </div>
 </body>
@@ -148,12 +148,12 @@ def send(new_apts: list[Apartment]) -> bool:
         return False
 
     if not _is_configured():
-        print("  [notify] Pominięto - brak konfiguracji SMTP (NOTIFY_SMTP_USER/PASSWORD/TO)")
+        print("  [notify] Pominieto - brak konfiguracji SMTP (NOTIFY_SMTP_USER/PASSWORD/TO)")
         return False
 
     recipients = [r.strip() for r in NOTIFY_TO.split(",") if r.strip()]
     count = len(new_apts)
-    subject = f"Berlin: {count} nowa oferta mieszkania" if count == 1 else f"Berlin: {count} nowe oferty mieszkań"
+    subject = f"Berlin: {count} nowa oferta mieszkania" if count == 1 else f"Berlin: {count} nowe oferty mieszkan"
 
     msg = MIMEMultipart("alternative")
     msg["Subject"] = subject
@@ -164,7 +164,7 @@ def send(new_apts: list[Apartment]) -> bool:
     without_wbs = [a for a in new_apts if not a.wbs_required]
     with_wbs    = [a for a in new_apts if a.wbs_required]
 
-    text_lines = [f"Nowe oferty mieszkań w Berlinie ({count})\n"]
+    text_lines = [f"Nowe oferty mieszkan w Berlinie ({count})\n"]
 
     if without_wbs:
         text_lines.append(f"== BEZ WBS ({len(without_wbs)}) ==\n")
@@ -196,21 +196,67 @@ def send(new_apts: list[Apartment]) -> bool:
         print(f"  [notify] Email wyslany do: {', '.join(recipients)} ({count} ofert)")
         return True
     except Exception as exc:
-        print(f"  [notify] BŁĄD wysyłania emaila: {exc}")
+        print(f"  [notify] BLAD wysylania emaila: {exc}")
         return False
 
 
-def send_daily_summary(rows: list[sqlite3.Row]) -> bool:
+def _stale_warnings_html(warnings: list[dict]) -> str:
+    """Buduje blok HTML z ostrzezeniami o portalach bez nowych ofert od >3 dni."""
+    if not warnings:
+        return ""
+    rows_html = "".join(
+        f"""<tr>
+          <td style="padding:6px 8px;border-bottom:1px solid #f5c6c6;
+            font-weight:bold;">{w['source'].upper()}</td>
+          <td style="padding:6px 8px;border-bottom:1px solid #f5c6c6;">{w['last_new']}</td>
+          <td style="padding:6px 8px;border-bottom:1px solid #f5c6c6;
+            text-align:center;">{w['days_ago']}</td>
+        </tr>"""
+        for w in warnings
+    )
+    return f"""
+      <div style="background:#fdecea;border:1px solid #f5c6c6;border-radius:6px;
+        padding:14px 20px;margin-bottom:20px;">
+        <h3 style="margin:0 0 10px;color:#c0392b;font-size:14px;">
+          &#9888;&nbsp;Ostrzezenie: brak nowych ofert od ponad 3 dni
+        </h3>
+        <p style="margin:0 0 10px;font-size:12px;color:#555;">
+          Ponizsze portale nie dodaly zadnych nowych ofert od ponad 3 dni.
+          Moze to oznaczac problem ze scraperem lub chwilowy brak ofert na portalu.
+        </p>
+        <table style="width:100%;border-collapse:collapse;font-size:12px;">
+          <thead>
+            <tr style="background:#f5c6c6;">
+              <th style="padding:6px 8px;text-align:left;">Portal</th>
+              <th style="padding:6px 8px;text-align:left;">Ostatnia nowa oferta</th>
+              <th style="padding:6px 8px;text-align:center;">Dni temu</th>
+            </tr>
+          </thead>
+          <tbody>{rows_html}</tbody>
+        </table>
+      </div>"""
+
+
+def send_daily_summary(
+    rows: list[sqlite3.Row],
+    stale_warnings: list[dict] | None = None,
+) -> bool:
     """
     Wysyla dzienny raport z WSZYSTKIMI ofertami dodanymi dzisiaj.
-    rows: lista sqlite3.Row z tabeli apartments (wynik query_today_new()).
+
+    Args:
+        rows:            Lista sqlite3.Row z tabeli apartments (wynik query_today_new()).
+        stale_warnings:  Lista slownikow z query_stale_sources() – portale bez nowych ofert
+                         od wiecej niz 3 dni. Jesli podana i niepusta, raport zawiera
+                         blok ostrzegawczy informujacy o mozliwym problemie ze scraperem.
     """
-    if not rows:
-        print("  [notify] Dzienny raport: brak nowych ofert dzisiaj.")
+    stale_warnings = stale_warnings or []
+    if not rows and not stale_warnings:
+        print("  [notify] Dzienny raport: brak nowych ofert i brak ostrzezen.")
         return False
 
     if not _is_configured():
-        print("  [notify] Pominięto - brak konfiguracji SMTP")
+        print("  [notify] Pominieto - brak konfiguracji SMTP")
         return False
 
     # Konwertuj Row -> Apartment
@@ -233,7 +279,10 @@ def send_daily_summary(rows: list[sqlite3.Row]) -> bool:
 
     recipients = [r.strip() for r in NOTIFY_TO.split(",") if r.strip()]
     count = len(apts)
-    subject = f"Berlin dzienny raport: {count} nowych ofert mieszkań"
+    if apts:
+        subject = f"Berlin dzienny raport: {count} nowych ofert mieszkan"
+    else:
+        subject = f"Berlin dzienny raport: ostrzezenia scraperow ({len(stale_warnings)})"
 
     msg = MIMEMultipart("alternative")
     msg["Subject"] = subject
@@ -244,6 +293,11 @@ def send_daily_summary(rows: list[sqlite3.Row]) -> bool:
     with_wbs    = [a for a in apts if a.wbs_required]
 
     text_lines = [f"Dzienny raport mieszkan Berlin ({count} nowych dzisiaj)\n"]
+    if stale_warnings:
+        text_lines.append("== OSTRZEZENIE: BRAK NOWYCH OFERT OD PONAD 3 DNI ==\n")
+        for w in stale_warnings:
+            text_lines.append(f"  {w['source'].upper():15} ostatnia nowa oferta: {w['last_new']} ({w['days_ago']} dni temu)\n")
+        text_lines.append("Sprawdz, czy scraper dziala poprawnie!\n")
     if without_wbs:
         text_lines.append(f"== BEZ WBS ({len(without_wbs)}) ==\n")
         for apt in without_wbs:
@@ -263,6 +317,7 @@ def send_daily_summary(rows: list[sqlite3.Row]) -> bool:
             )
 
     # Buduj HTML z naglowkiem 'Dzienny raport'
+    warnings_block = _stale_warnings_html(stale_warnings)
     sections = ""
     if without_wbs:
         sections += _section_table(without_wbs, "Bez WBS", "#27ae60")
@@ -276,7 +331,7 @@ def send_daily_summary(rows: list[sqlite3.Row]) -> bool:
   <div style="max-width:900px;margin:auto;background:#fff;border-radius:8px;
     box-shadow:0 2px 8px rgba(0,0,0,.1);overflow:hidden;">
     <div style="background:#1a252f;color:#fff;padding:20px 30px;">
-      <h1 style="margin:0;font-size:20px;">Dzienny raport mieszkań Berlin</h1>
+      <h1 style="margin:0;font-size:20px;">Dzienny raport mieszkan Berlin</h1>
       <p style="margin:8px 0 0;opacity:.8;font-size:13px;">
         Dzisiaj dodano {count} nowych ofert
         &nbsp;&nbsp;|&nbsp;&nbsp;
@@ -286,10 +341,11 @@ def send_daily_summary(rows: list[sqlite3.Row]) -> bool:
       </p>
     </div>
     <div style="padding:20px 30px;">
+      {warnings_block}
       {sections}
     </div>
     <div style="background:#ecf0f1;padding:12px 30px;font-size:11px;color:#999;">
-      Wiadomosc wygenerowana automatycznie &mdash; raport dzienny 19:30 CEST.
+      Wiadomosc wygenerowana automatycznie &mdash; raport dzienny 20:00 CEST.
     </div>
   </div>
 </body>

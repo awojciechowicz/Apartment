@@ -35,5 +35,11 @@ desktop.ini
 *.db
 !mieszkania.db
 
-# PDF (generowane)
-*.pdf
+# PDF (generowane lokalnie)
+dokumentacja.pdf
+explain_*.pdf
+
+# Skrypty generowania dokumentacji i debugowania (lokalne)
+generate_docs.py
+explain_*.py
+_debug_*.py

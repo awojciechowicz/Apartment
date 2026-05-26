@@ -142,7 +142,7 @@ The database `mieszkania.db` is committed back to the repository after every run
 GitHub UI → **Actions** → `Scraper mieszkan Berlin` → **Run workflow**
 
 Available inputs:
-- **`min_rooms`** – minimum number of rooms (default: `5`)
+- **`min_rooms`** – minimum number of rooms (default: `4`)
 - **`daily_summary`** – set to `true` to send a daily summary instead of running scrapers
 
 ### Running from a specific branch
@@ -172,6 +172,12 @@ Triggered when a listing with **≥ min_rooms rooms** appears in the database fo
 ### Daily summary (sent at 20:00 CEST)
 
 A single consolidated email with **all listings first seen today**, regardless of room count. Uses the same two-section HTML layout with a distinct dark header to distinguish it from regular alerts.
+
+#### Stale scraper warning
+
+If a portal has not produced any **new** listing for more than **3 days**, the daily summary email includes a red warning block listing those portals, their last-new-offer date, and the number of days elapsed. This helps detect situations where a scraper may be broken or a portal has changed its structure.
+
+The email is sent even if there are no new listings today, as long as at least one stale-source warning exists.
 
 Each table contains the following columns:
 
@@ -318,7 +324,7 @@ NOTIFY_SMTP_PASSWORD=xxxx-xxxx-xxxx-xxxx   # Gmail App Password
 NOTIFY_TO=recipient@gmail.com              # comma-separated for multiple addresses
 
 # Scraper
-MIN_ROOMS=5                                # minimum number of rooms (default: 5)
+MIN_ROOMS=4                                # minimum number of rooms (default: 4)
 ```
 
 > **Gmail App Password:** Go to [myaccount.google.com/apppasswords](https://myaccount.google.com/apppasswords), create an app password, and paste the 16-character code into `NOTIFY_SMTP_PASSWORD`.

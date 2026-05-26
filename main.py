@@ -3,12 +3,10 @@ Orkiestrator scrapera mieszkan w Berlinie.
 Uruchamia wszystkie 4 scrapery rownoczesnie i wyswietla wyniki.
 
 Zrodla: degewo.de, gewobag.de, wbm.de, howoge.de
-Filtr:  >= 5 pokoi (domyslnie)
+Filtr:  >= 4 pokoi (domyslnie)
 """
 
-import asyncio
 import concurrent.futures
-import sys
 import time
 from typing import Callable
 
@@ -16,7 +14,7 @@ import db
 import notify
 from models import Apartment
 
-MIN_ROOMS = 5.0
+MIN_ROOMS = 4.0
 
 
 def _run_scraper(name: str, fn: Callable, min_rooms: float) -> tuple[str, list[Apartment], str | None]:
@@ -204,7 +202,7 @@ def main(min_rooms: float = MIN_ROOMS) -> None:
 
 if __name__ == "__main__":
     import argparse
-    parser = argparse.ArgumentParser(description="Wyszukiwarka mieszkań Berlin")
+    parser = argparse.ArgumentParser(description="Wyszukiwarka mieszkan Berlin")
     parser.add_argument(
         "min_rooms",
         nargs="?",
@@ -215,14 +213,18 @@ if __name__ == "__main__":
     parser.add_argument(
         "--daily-summary",
         action="store_true",
-        help="Wyślij dzienny raport zamiast uruchamiać scrapery",
+        help="Wyslij dzienny raport zamiast uruchamiac scrapery",
     )
     args = parser.parse_args()
 
     if args.daily_summary:
         db.init_db()
         rows = db.query_today_new()
+        stale = db.query_stale_sources(days=3)
         print(f"[daily-summary] Znaleziono {len(rows)} ofert dodanych dzisiaj.")
-        notify.send_daily_summary(rows)
+        if stale:
+            print(f"[daily-summary] Ostrzezenie: {len(stale)} portal(e) bez nowych ofert od >3 dni: "
+                  f"{', '.join(w['source'] for w in stale)}")
+        notify.send_daily_summary(rows, stale_warnings=stale)
     else:
         main(min_rooms=args.min_rooms)

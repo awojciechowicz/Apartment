@@ -52,12 +52,12 @@ def _fetch_all() -> list[dict]:
     return payload.get("immoobjects", [])
 
 
-def scrape(min_rooms: float = 5.0) -> list[Apartment]:
+def scrape(min_rooms: float = 4.0) -> list[Apartment]:
     """
     Pobiera wszystkie mieszkania z howoge.de i filtruje po liczbie pokoi.
 
     Args:
-        min_rooms: Minimalna liczba pokoi (domyslnie 5).
+        min_rooms: Minimalna liczba pokoi (domyslnie 4).
 
     Returns:
         Lista obiektow Apartment.
