@@ -174,6 +174,15 @@ def scrape_degewo(min_rooms: float = MIN_ROOMS) -> list[Apartment]:
         else:
             url = None
 
+    # Strony degewo mogą się nakładać – deduplikacja po URL
+    seen: set[str] = set()
+    unique: list[Apartment] = []
+    for apt in apartments:
+        if apt.url not in seen:
+            seen.add(apt.url)
+            unique.append(apt)
+    apartments = unique
+
     print(f"[degewo] Znaleziono {len(apartments)} mieszkań >= {min_rooms} pokoi.")
     return apartments
 
