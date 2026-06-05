@@ -71,9 +71,9 @@ def _parse_page(soup: BeautifulSoup) -> list[Apartment]:
         # --- Liczba pokoi ---
         rooms_tag = card.select_one(".main-property-rooms")
         try:
-            rooms = float(rooms_tag.get_text(strip=True).replace(",", ".")) if rooms_tag else 0.0
+            rooms = float(rooms_tag.get_text(strip=True).replace(",", ".")) if rooms_tag else None
         except ValueError:
-            rooms = 0.0
+            rooms = None
 
         # --- Powierzchnia ---
         size_tag = card.select_one(".main-property-size")
@@ -171,7 +171,7 @@ def scrape(min_rooms: float = 4.0) -> list[Apartment]:
         page += 1
 
     # Filtruj po liczbie pokoi
-    filtered = [a for a in results if a.rooms >= min_rooms]
+    filtered = [a for a in results if (a.rooms or 0) >= min_rooms]
     return filtered
 
 

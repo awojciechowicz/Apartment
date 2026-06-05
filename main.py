@@ -1,8 +1,8 @@
 """
 Orkiestrator scrapera mieszkan w Berlinie.
-Uruchamia wszystkie 4 scrapery rownoczesnie i wyswietla wyniki.
+Uruchamia wszystkie 5 scraperow rownoczesnie i wyswietla wyniki.
 
-Zrodla: degewo.de, gewobag.de, wbm.de, howoge.de
+Zrodla: degewo.de, gewobag.de, wbm.de, howoge.de, inberlinwohnen.de
 Filtr:  >= 4 pokoi (domyslnie)
 """
 
@@ -17,7 +17,7 @@ from models import Apartment
 MIN_ROOMS = 4.0
 
 
-def _run_scraper(name: str, fn: Callable, min_rooms: float) -> tuple[str, list[Apartment], str | None]:
+def _run_scraper(name: str, fn: Callable, min_rooms: float) -> tuple[str, list[Apartment], str | None, list[Apartment]]:
     """
     Uruchamia jeden scraper (sync lub async).
     Pobiera WSZYSTKIE oferty (min_rooms=1), zapisuje do bazy,
@@ -137,8 +137,8 @@ def main(min_rooms: float = MIN_ROOMS) -> None:
             if err:
                 errors[name] = err
 
-    # Wyslij email tylko dla nowych ofert >= min_rooms pokoi (niezaleznie od WBS)
-    notif_apts = [a for a in all_new_apts if (a.rooms or 0) >= min_rooms]
+    # Wyslij email dla nowych ofert >= min_rooms pokoi LUB z WBS (tak samo jak widok)
+    notif_apts = [a for a in all_new_apts if (a.rooms or 0) >= min_rooms or a.wbs_required]
     if notif_apts:
         print(f"\n  Wyslij powiadomienie o {len(notif_apts)} nowych ofertach >= {min_rooms:.0f} pok. "
               f"({sum(1 for a in notif_apts if not a.wbs_required)} bez WBS "
