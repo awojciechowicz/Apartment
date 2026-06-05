@@ -66,7 +66,7 @@ def scrape(min_rooms: float = 4.0) -> list[Apartment]:
     results: list[Apartment] = []
 
     for obj in raw:
-        rooms = float(obj.get("rooms") or 0)
+        rooms = float(obj.get("rooms") or 0) or None
 
         wbs_raw = str(obj.get("wbs", "")).strip().lower()
         wbs_required = wbs_raw in ("ja", "yes", "true", "1")
@@ -98,7 +98,7 @@ def scrape(min_rooms: float = 4.0) -> list[Apartment]:
         ))
 
     # Filtruj po liczbie pokoi
-    filtered = [a for a in results if a.rooms >= min_rooms]
+    filtered = [a for a in results if (a.rooms or 0) >= min_rooms]
     return filtered
 
 
