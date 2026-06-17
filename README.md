@@ -9,9 +9,10 @@ Automated rental apartment scraper for Berlin – monitors the portals of 6 Berl
 - 🔍 **5 scrapers** running in parallel – degewo, gewobag, wbm, howoge, inberlinwohnen.de (GESOBAU + STADT UND LAND + Berlinovo)
 - 🏷️ **WBS detection** – distinguishes the type of certificate required (WBS 100/140/160/180/220, besonderer Wohnbedarf)
 - 💾 **SQLite persistence** – listing history, upsert, detection of removed listings
-- 📧 **HTML email** – two-section table (no WBS / WBS required) with columns: source, address, district, rooms, area, rent, availability
-- ⏱️ **GitHub Actions** – cron every 30 minutes, database persisted in the repository via `git commit`
-- 🎛️ **Configurable threshold** – defaults to ≥ 5 rooms, adjustable via the `MIN_ROOMS` environment variable
+- 📧 **HTML email** – two-section table (no WBS / WBS required), sent only for listings meeting the room threshold (≥ 4 rooms by default)
+- ⏱️ **GitHub Actions** – cron every 30 min (7:00–19:30 CEST) + daily summary at 20:00 CEST, database persisted in the repository via `git commit`
+- 📋 **Daily summary** – consolidated email at 20:00 CEST with all listings added that day
+- 🎛️ **Configurable threshold** – defaults to ≥ 4 rooms, adjustable via CLI argument or `MIN_ROOMS` secret
 
 ---
 
@@ -19,7 +20,7 @@ Automated rental apartment scraper for Berlin – monitors the portals of 6 Berl
 
 | Source | Housing company | Method | WBS |
 |--------|----------------|--------|-----|
-| [degewo.de](https://www.degewo.de) | DEGEWO | Playwright + BeautifulSoup4 | ✅ |
+| [degewo.de](https://www.degewo.de) | DEGEWO | requests + BeautifulSoup4 | ✅ |
 | [gewobag.de](https://www.gewobag.de) | GEWOBAG | WP REST API + Playwright | ✅ |
 | [wbm.de](https://www.wbm.de) | WBM | requests + BeautifulSoup4 | ✅ |
 | [howoge.de](https://www.howoge.de) | HOWOGE | POST JSON API | ✅ |
@@ -36,22 +37,20 @@ Wyszukiwanie/
 ├── models.py                  # Apartment dataclass (shared data model)
 ├── scrapers/
 │   ├── __init__.py
-│   ├── degewo.py              # Playwright + BS4
+│   ├── degewo.py              # requests + BS4 (SSR, no Playwright)
 │   ├── gewobag.py             # WP REST API + Playwright
 │   ├── wbm.py                 # requests + BS4 / TYPO3+OpenImmo
 │   ├── howoge.py              # POST JSON API
 │   └── inberlinwohnen.py      # requests + BS4 / Laravel Livewire snapshots
-├── main.py                    # Orchestrator – ThreadPoolExecutor, 5 scrapers
-├── db.py                      # SQLite – upsert, history, migrations
-├── notify.py                  # HTML email via SMTP (Gmail App Password)
+├── main.py                    # Orchestrator – ThreadPoolExecutor, 5 scrapers in parallel
+├── db.py                      # SQLite – upsert, history, migrations, query_today_new()
+├── notify.py                  # HTML email via SMTP – send() and send_daily_summary()
 ├── mieszkania.db              # SQLite database (tracked by git)
 ├── .env.example               # Environment variable template
 ├── requirements.txt           # Python dependencies
-├── generate_docs.py           # PDF documentation generator (dev)
-├── dokumentacja.pdf           # Generated technical documentation
 └── .github/
     └── workflows/
-        └── scrape.yml         # GitHub Actions – cron every 30 min
+        └── scrape.yml         # GitHub Actions – cron every 30 min + daily summary
 ```
 
 ---
@@ -95,9 +94,6 @@ NOTIFY_SMTP_PORT=587
 NOTIFY_SMTP_USER=your.email@gmail.com
 NOTIFY_SMTP_PASSWORD=xxxx-xxxx-xxxx-xxxx   # Gmail App Password
 NOTIFY_TO=recipient@gmail.com              # comma-separated for multiple addresses
-
-# Scraper
-MIN_ROOMS=5                                # minimum number of rooms (default: 5)
 ```
 
 > **Gmail App Password:** Go to [myaccount.google.com/apppasswords](https://myaccount.google.com/apppasswords), create an app password, and paste the 16-character code into `NOTIFY_SMTP_PASSWORD`.
@@ -105,43 +101,85 @@ MIN_ROOMS=5                                # minimum number of rooms (default: 5
 ### Running
 
 ```bash
-# Default: ≥ 5 rooms
+# Default: ≥ 4 rooms
 python main.py
 
-# Custom room threshold
-python main.py 4
+# Custom room threshold (e.g. 3 rooms)
+python main.py 3
+
+# Daily summary – query the DB for today's new listings and send a consolidated email
+python main.py --daily-summary
+
+# Daily summary with custom threshold
+python main.py 4 --daily-summary
 ```
 
 ---
 
 ## ⚙️ GitHub Actions (automated scheduling)
 
-The scraper runs automatically **every 30 minutes** via GitHub Actions. The database `mieszkania.db` is persisted in the repository via a `chore: update DB [skip ci]` commit.
+Two cron schedules are configured (all times UTC; Germany is CEST = UTC+2 in summer):
+
+| Cron (UTC) | German time | Mode |
+|-----------|------------|------|
+| `0,30 5-17 * * *` | 07:00 – 19:30 CEST, every 30 min | Normal scrape – emails only for new listings ≥ 5 rooms |
+| `0 18 * * *` | 20:00 CEST daily | Daily summary – consolidated email with all listings added today |
+
+The database `mieszkania.db` is committed back to the repository after every run (`chore: update DB [skip ci]`), providing full listing history.
 
 ### Required Secrets (Settings → Secrets → Actions)
 
-| Secret | Description |
-|--------|-------------|
-| `NOTIFY_SMTP_HOST` | SMTP server (e.g. `smtp.gmail.com`) |
-| `NOTIFY_SMTP_PORT` | SMTP port (e.g. `587`) |
-| `NOTIFY_SMTP_USER` | SMTP login / sender address |
-| `NOTIFY_SMTP_PASSWORD` | SMTP password / Gmail App Password |
-| `NOTIFY_TO` | Recipient address(es), comma-separated |
+| Secret | Required | Description |
+|--------|----------|-------------|
+| `NOTIFY_SMTP_USER` | ✅ | SMTP login / sender address |
+| `NOTIFY_SMTP_PASSWORD` | ✅ | SMTP password / Gmail App Password |
+| `NOTIFY_TO` | ✅ | Recipient address(es), comma-separated |
+| `NOTIFY_SMTP_HOST` | optional | SMTP server (default: `smtp.gmail.com`) |
+| `NOTIFY_SMTP_PORT` | optional | SMTP port (default: `587`) |
 
 ### Manual trigger
 
-GitHub UI → **Actions** → `Scraper mieszkan Berlin` → **Run workflow** → optionally specify the minimum number of rooms.
+GitHub UI → **Actions** → `Scraper mieszkan Berlin` → **Run workflow**
+
+Available inputs:
+- **`min_rooms`** – minimum number of rooms (default: `4`)
+- **`daily_summary`** – set to `true` to send a daily summary instead of running scrapers
+
+### Running from a specific branch
+
+GitHub Actions cron always runs from the **repository's default branch** (Settings → General → Default branch).  
+To run from a different branch, specify `ref` in the checkout step:
+
+```yaml
+- uses: actions/checkout@v4
+  with:
+    ref: my-branch
+```
 
 ---
 
 ## 📧 Email format
 
-The HTML email is split into two colour-coded sections:
+### New listing alert (sent on every scrape run)
+
+Triggered when a listing with **≥ min_rooms rooms** appears in the database for the first time. The HTML email is split into two colour-coded sections:
 
 **🟢 No WBS required** – listings available to everyone  
-**🔴 WBS required** – listings requiring a housing entitlement certificate
+**🔴 WBS required** – listings requiring a housing entitlement certificate (Wohnberechtigungsschein)
 
-Each section contains a table with the following columns:
+> ℹ️ Listings with fewer than `min_rooms` rooms (e.g. 1–4 room WBS listings) are saved to the database and shown in the console output but **do not trigger an email**.
+
+### Daily summary (sent at 20:00 CEST)
+
+A single consolidated email with **all listings first seen today**, regardless of room count. Uses the same two-section HTML layout with a distinct dark header to distinguish it from regular alerts.
+
+#### Stale scraper warning
+
+If a portal has not produced any **new** listing for more than **3 days**, the daily summary email includes a red warning block listing those portals, their last-new-offer date, and the number of days elapsed. This helps detect situations where a scraper may be broken or a portal has changed its structure.
+
+The email is sent even if there are no new listings today, as long as at least one stale-source warning exists.
+
+Each table contains the following columns:
 
 | Source | Listing / Address | District | Rooms | Area | Rent | WBS | Available from |
 |--------|------------------|----------|-------|------|------|-----|----------------|
@@ -185,11 +223,11 @@ Every listing is an `Apartment` dataclass instance:
 
 ## 📄 Technical documentation
 
-Full technical documentation in PDF format: [`dokumentacja.pdf`](./dokumentacja.pdf)
+Full technical documentation in PDF format (Polish): [`dokumentacja.pdf`](./dokumentacja.pdf)
 
-Contains a detailed description of each scraper, flow diagrams, database schema, SMTP configuration, and a sample email preview.
+Contains a detailed description of each scraper, flow diagrams, database schema, SMTP configuration, GitHub Actions setup, and a sample email preview.
 
-To regenerate the PDF:
+To regenerate the PDF locally:
 
 ```bash
 pip install fpdf2
@@ -198,7 +236,21 @@ python generate_docs.py
 
 ---
 
+## 📋 Changelog
+
+### 16.06.2026 – gewobag: room count fallback from listing title
+
+Some gewobag listings display **"Auf Anfrage"** (on request) for rent, area, and address – the offer page intentionally omits the data. When Playwright finds no `Anzahl Zimmer` row in the details table, `scrapers/gewobag.py` now falls back to extracting the room count from the listing title (e.g. `"1 Zimmerwohnung"` → `1.0`). This resolved 2 of the 4 previously `rooms=None` listings. The remaining 2 have titles without the word *Zimmer* and genuinely publish no quantitative data.
+
+### 26.05.2026 – degewo: full scraper rewrite (Playwright → requests + BS4)
+
+Degewo redesigned their portal. The new version is fully server-side rendered (SSR) – Playwright is no longer needed. The scraper was rewritten to use `requests + BeautifulSoup4` only, reducing runtime from ~20 s to ~10 s.
+
+### Prior – room threshold changed: MIN_ROOMS 5 → 4
+
+
+---
+
 ## 📝 License
 
 Private project – for personal use only.
-# Apartment
