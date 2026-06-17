@@ -76,6 +76,20 @@ def _wbs_type_from_title(title: str, fallback: str | None) -> str | None:
     return fallback
 
 
+def _rooms_from_title(title: str) -> Optional[float]:
+    """
+    Fallback: wyciaga liczbe pokoi z tytulu gdy strona szczegolów nie podaje danych.
+    Obsluguje: '1 Zimmerwohnung', '2-Zimmer', '3,5 Zimmer' itd.
+    """
+    m = re.search(r'(\d+(?:[,\.]\d+)?)\s*[-–]?\s*Zimmer', title, re.IGNORECASE)
+    if m:
+        try:
+            return float(m.group(1).replace(",", "."))
+        except ValueError:
+            pass
+    return None
+
+
 def _district_from_classlist(class_list: list) -> str:
     """Wyciaga dzielnice z class_list np. bezirke-spandau-haselhorst."""
     for cls in class_list:
@@ -263,6 +277,10 @@ def scrape_gewobag(min_rooms: float = MIN_ROOMS) -> List[Apartment]:
     apartments: List[Apartment] = []
     for entry, details in pairs:
         rooms = details.get("rooms")
+
+        # Fallback: wyciagnij liczbe pokoi z tytulu (np. dla ofert "Auf Anfrage")
+        if rooms is None:
+            rooms = _rooms_from_title(entry["title"])
 
         # Filtr pokojowy
         if rooms is not None and rooms < min_rooms:

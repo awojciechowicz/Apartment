@@ -52,6 +52,9 @@ class PDF(FPDF):
         self.set_x(x)
 
     def code_block(self, text: str):
+        block_h = len(text.split("\n")) * 4.5 + 7
+        if self.get_y() + block_h > self.page_break_trigger:
+            self.add_page()
         self.set_fill_color(240, 240, 240)
         self.set_font("Courier", "", 8)
         self.set_draw_color(180, 180, 180)
@@ -66,24 +69,61 @@ class PDF(FPDF):
         self.set_draw_color(0, 0, 0)
         self.set_font("Helvetica", "", 9)
 
+    def _row_height(self, cols, widths, font_style="", font_size=8, line_h=6.5):
+        """Oblicza wysokosc wiersza tabeli na podstawie najdluzszej komorki."""
+        self.set_font("Helvetica", font_style, font_size)
+        max_lines = 1
+        for col, w in zip(cols, widths):
+            cur_w, lines = 0, 1
+            for word in str(col).split():
+                ww = self.get_string_width(word + " ")
+                if cur_w > 0 and cur_w + ww > w - 2:
+                    lines += 1
+                    cur_w = ww
+                else:
+                    cur_w += ww
+            max_lines = max(max_lines, lines)
+        return max_lines * line_h + 1
+
     def table_row(self, cols, widths, header=False):
         fill_color = (30, 80, 160) if header else (255, 255, 255)
         text_color = (255, 255, 255) if header else (0, 0, 0)
+        self.set_font("Helvetica", "B" if header else "", 8)
+        line_h = 6.5
+        row_h = self._row_height(cols, widths, "B" if header else "", 8, line_h)
+        if self.get_y() + row_h > self.page_break_trigger:
+            self.add_page()
         self.set_fill_color(*fill_color)
         self.set_text_color(*text_color)
-        self.set_font("Helvetica", "B" if header else "", 8)
+        x0, y0 = self.l_margin, self.get_y()
+        x = x0
         for col, w in zip(cols, widths):
-            self.cell(w, 6.5, col, border=1, fill=header)
-        self.ln()
+            self.rect(x, y0, w, row_h, "FD" if header else "D")
+            self.set_xy(x + 1, y0 + 1)
+            self.multi_cell(w - 2, line_h, str(col), border=0, fill=False,
+                            new_x=XPos.LMARGIN, new_y=YPos.NEXT)
+            x += w
+        self.set_xy(x0, y0 + row_h)
         self.set_text_color(0, 0, 0)
         self.set_fill_color(255, 255, 255)
 
     def alt_table_row(self, cols, widths, idx):
-        self.set_fill_color(245, 248, 255) if idx % 2 == 0 else self.set_fill_color(255, 255, 255)
+        bg = (245, 248, 255) if idx % 2 == 0 else (255, 255, 255)
         self.set_font("Helvetica", "", 8)
+        line_h = 6.5
+        row_h = self._row_height(cols, widths, "", 8, line_h)
+        if self.get_y() + row_h > self.page_break_trigger:
+            self.add_page()
+        self.set_fill_color(*bg)
+        x0, y0 = self.l_margin, self.get_y()
+        x = x0
         for col, w in zip(cols, widths):
-            self.cell(w, 6.5, col, border=1, fill=True)
-        self.ln()
+            self.rect(x, y0, w, row_h, "FD")
+            self.set_xy(x + 1, y0 + 1)
+            self.multi_cell(w - 2, line_h, str(col), border=0, fill=False,
+                            new_x=XPos.LMARGIN, new_y=YPos.NEXT)
+            x += w
+        self.set_xy(x0, y0 + row_h)
         self.set_fill_color(255, 255, 255)
 
     def status_badge(self, text: str, color: tuple):
@@ -119,18 +159,18 @@ def generate():
     pdf.ln(6)
 
     # -- PODSUMOWANIE STANU ----------------------------------------------------
-    pdf.section_title("Stan realizacji projektu (20.04.2026)")
+    pdf.section_title("Stan realizacji projektu (16.06.2026)")
     widths_s = [35, 95, 40]
     pdf.table_row(["Modul", "Metoda / Uwagi", "Status"], widths_s, header=True)
     status_rows = [
-        ("degewo.de",      "Playwright + BeautifulSoup4 / TYPO3+OpenImmo",    "GOTOWY"),
+        ("degewo.de",      "requests + BeautifulSoup4 / SSR (bez Playwright)",  "GOTOWY"),
         ("gewobag.de",     "WP REST API (lista) + Playwright (szczegoly)",     "GOTOWY"),
         ("wbm.de",         "requests + BeautifulSoup4 / TYPO3+OpenImmo",      "GOTOWY"),
         ("howoge.de",      "POST JSON API / TYPO3 EXT:howrealestate",         "GOTOWY"),
         ("inberlinwohnen.de", "requests + BS4 / Laravel Livewire snapshots (GESOBAU, STADT UND LAND, Berlinovo)", "GOTOWY"),
         ("db.py",          "SQLite - upsert, historia, migracja",             "GOTOWY"),
         ("notify.py",      "SMTP email HTML, Gmail App Password",             "GOTOWY"),
-        ("GitHub Actions", "Cron co 30 min, DB persistence via git commit",   "GOTOWY"),
+        ("GitHub Actions", "Cron co 30 min (7-19:30 CEST) + dzienny raport 20:00 CEST, DB via git", "GOTOWY"),
     ]
     for i, row in enumerate(status_rows):
         pdf.alt_table_row(list(row), widths_s, i)
@@ -139,7 +179,7 @@ def generate():
     # -- 1. CEL PROJEKTU -------------------------------------------------------
     pdf.section_title("1. Cel projektu")
     pdf.body_text(
-        "Projekt ma na celu automatyczne wyszukiwanie mieszkan 5-pokojowych "
+        "Projekt ma na celu automatyczne wyszukiwanie mieszkan 4-pokojowych i wiekszych "
         "dostepnych do wynajecia w Berlinie na stronach internetowych czterech "
         "spoldzielni mieszkaniowych: degewo, gewobag, wbm oraz howoge.\n\n"
         "Kluczowym wymaganiem jest rozroznienie ofert wymagajacych "
@@ -161,7 +201,7 @@ def generate():
         "    wbm.py              # Scraper wbm.de      [requests + BS4]\n"
         "    howoge.py           # Scraper howoge.de   [POST JSON API]\n"
         "    inberlinwohnen.py   # Scraper inberlinwohnen.de [Livewire / GESOBAU+STADTUNDLAND+Berlinovo]\n"
-        "  main.py               # Orchestrator - uruchamia wszystkie 4 scrapery\n"
+        "  main.py               # Orchestrator - uruchamia wszystkie 5 scraperow rownoczesnie\n"
         "  db.py                 # SQLite - zapis/odczyt ogloszenia, historia\n"
         "  notify.py             # Powiadomienia email (SMTP) o nowych ogloszeniach\n"
         "  mieszkania.db         # Baza danych SQLite (sledzona przez git)\n"
@@ -219,41 +259,52 @@ def generate():
     # -- 5. SCRAPER DEGEWO -----------------------------------------------------
     pdf.section_title("5. Scraper degewo.de")
 
-    pdf.subsection_title("5.1  Metoda scrapowania")
+    pdf.subsection_title("5.1  Metoda scrapowania (stan po 26.05.2026)")
     pdf.body_text(
-        "Strona degewo.de uzywa silnika TYPO3 z OpenImmo. Wyniki sa renderowane "
-        "server-side, ale paginacja dziala przez jQuery submit formularza. "
-        "Scraper uzywa Playwright (headless Chromium) z asyncio."
+        "Strona degewo.de uzywa silnika TYPO3 z OpenImmo. Po redesignie portalu "
+        "(wykrytym 26.05.2026) strona jest w pelni renderowana server-side (SSR) - "
+        "Playwright nie jest juz potrzebny. Scraper uzywa wylacznie requests + "
+        "BeautifulSoup4 (synchroniczny, szybszy niz poprzednia wersja z Playwright)."
     )
     for item in [
         "URL: https://www.degewo.de/immosuche/",
-        "Funkcja: async def scrape_degewo(min_rooms)",
-        "Selektor kart: article.article-list__item--immosearch",
-        "Paginacja: klik a.pager__next + czekanie na networkidle (7 stron)",
-        "Filtr po pokojach: po stronie klienta po pobraniu wszystkich stron",
+        "Funkcja: def scrape_degewo(min_rooms)  [SYNC - nie async]",
+        "Selektor kart: div.c-teaser.c-teaser--apartment  [ZMIENIONY]",
+        "Dane z karty: div.c-definition-list__item -> dt (wartosc) / dd (etykieta)",
+        "Paginacja: GET URL z a[href*='tx_openimmo_immobilie'] tekst 'Zur nachsten Seite'",
+        "Opoznienie miedzy stronami: 0.5 sek. (time.sleep)",
+        "Czas wykonania: ~8 sek. dla 7 stron / 61 ofert (bylo ~20 sek. z Playwright)",
     ]:
         pdf.bullet(item)
     pdf.ln(2)
 
     pdf.subsection_title("5.2  Wyodrebniane dane")
-    for item in [
-        "Adres i dzielnica: span.article__meta ('Ulica nr | Dzielnica')",
-        "Liczba pokoi: regex '(\\d+[,.]?\\d*) Zimmer' z tytulu/tekstu",
-        "Powierzchnia: regex '(\\d+[,.]\\d+) m2'",
-        "Czynsz cieplo: regex kwoty EUR",
-        "Data dostepnosci: fraza 'frei ab' + data lub 'sofort'",
-        "WBS: regex 'wbs\\s*(\\d+)' lub fraza 'besonderer Wohnbedarf'",
-    ]:
-        pdf.bullet(item)
+    widths_d2 = [48, 122]
+    pdf.table_row(["Pole", "Selektor / zrodlo"], widths_d2, header=True)
+    degewo_fields = [
+        ("Tytul",         "h3.c-headline a (text)"),
+        ("URL",           "h3.c-headline a (href), prepend BASE_URL jesli wzgledny)"),
+        ("Adres",         "div.c-copy > p  (format: 'Ulica nr | Dzielnica')"),
+        ("Dzielnica",     "druga czesc po '|' z div.c-copy > p"),
+        ("Pokoje",        "c-definition-list__item gdzie dd='Zimmer' -> dt (float)"),
+        ("Warmmiete",     "c-definition-list__item gdzie dd='Warmmiete' -> dt (EUR, float)"),
+        ("Powierzchnia",  "c-definition-list__item gdzie dd='m2' -> dt (float)"),
+        ("Dostepnosc",    "c-definition-list__item gdzie dd='frei ab' -> dt (str)"),
+        ("WBS (bool)",    "regex r'\\bohne\\s+wbs\\b' -> False; 'wbs\\s*(\\d+)' -> True"),
+        ("WBS (typ)",     "'WBS 160' / 'WBS 220' itd. lub 'WBS (typ nieokreslony)'"),
+    ]
+    for i, row in enumerate(degewo_fields):
+        pdf.alt_table_row(list(row), widths_d2, i)
     pdf.ln(2)
 
-    pdf.subsection_title("5.3  Wyniki testowe (20.04.2026)")
+    pdf.subsection_title("5.3  Wyniki testowe (26.05.2026, min 1 pokoj)")
+    pdf.body_text("61 ofert lacznie (7 stron). Przyklady:")
     widths3 = [55, 18, 22, 40, 35]
-    pdf.table_row(["Adres", "Pok.", "m2", "Czynsz calkowity", "WBS"], widths3, header=True)
+    pdf.table_row(["Adres", "Pok.", "m2", "Czynsz Warmmiete", "WBS"], widths3, header=True)
     res_d = [
-        ("Bismarckstrasse 17A",     "5", "99,46",  "1.504,83 EUR", "WBS 160/180/220"),
-        ("Bismarckstrasse 17A",     "5", "111,18", "2.071,28 EUR", "Bez WBS"),
-        ("Furstenwalder Allee 324", "5", "107,81", "2.186,38 EUR", "Bez WBS"),
+        ("Charlottenstrasse 21 | Kopenick", "1", "45,12", "977,29 EUR",   "Bez WBS"),
+        ("Alt-Britz 23 | Britz",            "1", "33,04", "1.179,32 EUR", "Bez WBS"),
+        ("Eugen-Roth-Weg 4 | Marzahn Sud",  "1", "40,67", "843,49 EUR",   "Bez WBS"),
     ]
     for i, row in enumerate(res_d):
         pdf.alt_table_row(list(row), widths3, i)
@@ -314,8 +365,8 @@ def generate():
         pdf.bullet(item)
     pdf.ln(2)
 
-    pdf.subsection_title("6.5  Wyniki testowe (20.04.2026)")
-    pdf.body_text("Mieszkania z co najmniej 5 pokojami (7 znalezionych):")
+    pdf.subsection_title("6.5  Wyniki testowe (16.06.2026, min 1 pokoj)")
+    pdf.body_text("Mieszkania ze wszyskich pokoi (49 znalezionych). Nowy fallback _rooms_from_title poprawil 2 z 4 ofert 'Auf Anfrage'.")
     widths_g = [60, 14, 22, 38, 36]
     pdf.table_row(["Adres", "Pok.", "m2", "Czynsz calkowity", "WBS"], widths_g, header=True)
     res_g = [
@@ -373,7 +424,7 @@ def generate():
     pdf.subsection_title("7.3  Wyniki testowe (20.04.2026)")
     pdf.body_text(
         "WBM oferuje aktualnie 7 mieszkan (1-3 pokojowe). "
-        "Brak ofert >= 5 pokoi w dniu testowania."
+        "Brak ofert >= 4 pokoi w dniu testowania."
     )
     widths_wt = [55, 18, 22, 40, 35]
     pdf.table_row(["Adres", "Pok.", "m2", "Czynsz (Warmmiete)", "WBS"], widths_wt, header=True)
@@ -437,16 +488,16 @@ def generate():
     pdf.subsection_title("8.3  Wydajnosc")
     for item in [
         "Jedno zapytanie POST zwraca wszystkie wyniki (API ignoruje parametr limit/page)",
-        "Czas wykonania: < 2 sekundy",
-        "Lacznie ofert: 47 (wg stanu na 20.04.2026)",
-        "Rozklad pokoi: 1 pok. x9, 2 pok. x18, 3 pok. x15, 4 pok. x5",
+        "Czas wykonania: < 3 sekundy",
+        "Lacznie ofert: 31 (wg stanu na 16.06.2026)",
+        "Rozklad pokoi: 2 pok. x2, 3 pok. x17, 4 pok. x12",
     ]:
         pdf.bullet(item)
     pdf.ln(2)
 
-    pdf.subsection_title("8.4  Wyniki testowe (20.04.2026)")
+    pdf.subsection_title("8.4  Wyniki testowe (16.06.2026)")
     pdf.body_text(
-        "Howoge aktualnie nie oferuje mieszkan >= 5 pokoi. "
+        "Howoge aktualnie oferuje 31 ofert. "
         "Przykladowe oferty 4-pokojowe:"
     )
     widths_ht = [55, 18, 22, 40, 35]
@@ -507,7 +558,7 @@ def generate():
     )
     pdf.ln(2)
 
-    pdf.subsection_title("9.5  Wyniki testowe (20.04.2026, min 5 pokoi)")
+    pdf.subsection_title("9.5  Wyniki testowe (16.06.2026, min 1 pokoj)")
     widths_ib = [50, 10, 12, 22, 44, 30]
     pdf.table_row(
         ["Adres", "Pok.", "m2", "Czynsz", "Spoldzielnia", "WBS"],
@@ -519,9 +570,9 @@ def generate():
     for i, row in enumerate(res_ib):
         pdf.alt_table_row(list(row), widths_ib, i)
     pdf.body_text(
-        "Wyniki STADT UND LAND i Berlinovo: brak ofert >= 5 pokoi w tej dacie. "
-        "Lacznie scraper zwrocil 19 ofert po filtrowaniu SKIP_COMPANIES (6 GESOBAU + 13 STADT UND LAND + 0 Berlinovo), "
-        "z czego 1 spelniala kryterium >= 5 pokoi."
+        "Wyniki STADT UND LAND i Berlinovo: brak ofert >= 4 pokoi w tej dacie. "
+        "Lacznie scraper zwrocil 50 ofert po filtrowaniu SKIP_COMPANIES "
+        "(GESOBAU + STADT UND LAND + Berlinovo), z czego kilka spelnialo kryterium >= 4 pokoje."
     )
     pdf.ln(4)
 
@@ -535,36 +586,46 @@ def generate():
         "sa owijane przez asyncio.run() wewnatrz watku."
     )
     pdf.code_block(
-        "# Uruchomienie z domyslnym filtrem >= 5 pokoi:\n"
+        "# Uruchomienie z domyslnym filtrem >= 4 pokoje:\n"
         "python main.py\n\n"
-        "# Uruchomienie z innym progiem (np. 4 pokoje):\n"
-        "python main.py 4"
+        "# Uruchomienie z innym progiem (np. 5 pokoi):\n"
+        "python main.py 5\n\n"
+        "# Dzienny raport z bazy (bez scrapowania):\n"
+        "python main.py --daily-summary\n\n"
+        "# Dzienny raport + inny prog:\n"
+        "python main.py 4 --daily-summary"
     )
     pdf.ln(2)
 
     pdf.subsection_title("10.2  Schemat dzialania")
     for item in [
         "Importuje dynamicznie kazdy modul scrapera (importlib.import_module)",
-        "Uruchamia scrapery rownoczesnie - howoge, wbm i inberlinwohnen konczy sie w < 40 sek.",
-        "degewo (Playwright) i gewobag (Playwright) dzialaja rownoleglo ~2-3 min",
+        "Uruchamia scrapery rownoczesnie - howoge, wbm, degewo i inberlinwohnen konczy sie w < 40 sek.",
+        "gewobag (WP API + Playwright dla stron szczegolow) dziala ~2-3 min",
+        "degewo: requests + BS4 (SSR), bez Playwright - dziala synchronicznie w watku",
         "inberlinwohnen.de: requests + BS4 (Laravel Livewire snapshots), bez Playwright",
-        "Wyniki sa zbierane i wyswietlane po zakonczeniu wszystkich scraperow",
-        "Sortowanie: najpierw oferty bez WBS, potem z WBS; malejaco po pokojach",
+        "Kazdy scraper pobiera WSZYSTKIE oferty (min_rooms=1), zapisuje cale do bazy",
+        "Wyniki do wyswietlenia/emaila: bez WBS >= min_rooms LUB jakikolwiek WBS (dowolna l. pok.)",
+        "Sortowanie: najpierw bez WBS (malejaco pokoje), potem z WBS (malejaco pokoje)",
         "inberlinwohnen pomija degewo/gewobag/wbm/howoge (te maja osobne scrapery)",
+        "gewobag: typ WBS (220/180/160 itd.) wyciagany z tytulu ogloszenia przez regex",
+        "--daily-summary: tryb raportu dziennego - odpytuje baze o oferty z dzis (first_seen_at >= UTC today),"
+        " wysyla zbiorczy email przez notify.send_daily_summary() bez uruchamiania scraperow",
+        "Parsowanie argumentow: argparse (min_rooms jako argument pozycyjny, --daily-summary jako flaga)",
     ]:
         pdf.bullet(item)
     pdf.ln(2)
 
-    pdf.subsection_title("10.3  Podsumowanie wynikow (20.04.2026, min 5 pokoi)")
+    pdf.subsection_title("10.3  Podsumowanie wynikow (16.06.2026, min 4 pokoje, WBS dowolna l. pok.)")
     widths_m = [38, 18, 18, 18, 76]
     pdf.table_row(["Zrodlo", "Bez WBS", "Z WBS", "Razem", "Uwagi"], widths_m, header=True)
     main_rows = [
-        ("degewo.de",         "2", "1", "3",  "5-pok. Spandau/Friedrichshagen"),
-        ("gewobag.de",        "2", "4", "6",  "5-pok. Spandau/Treptow-Koepenick"),
-        ("wbm.de",            "0", "0", "0",  "Brak ofert >= 5 pok. (max 3 pok.)"),
-        ("howoge.de",         "0", "0", "0",  "Brak ofert >= 5 pok. (max 4 pok.)"),
-        ("inberlinwohnen.de", "1", "0", "1",  "GESOBAU 5-pok. Pankow (155 m2, 2090 EUR)"),
-        ("RAZEM",             "5", "5", "10", "~2 minuty calkowitego czasu"),
+        ("degewo.de",         "4",  "5",  "9",  "bez WBS: 4-5 pok.; WBS: 1-5 pok. (WBS 140/160/180/220)"),
+        ("gewobag.de",        "3",  "10", "13", "bez WBS: 2-5 pok.; WBS: 1-5 pok. (WBS 180/220); 4 oferty Auf Anfrage"),
+        ("wbm.de",            "7",  "0",  "7",  "3-pokojowe bez WBS (7 ofert)"),
+        ("howoge.de",         "0",  "11", "11", "WBS 100/140/160/220, 2-4 pok. (Hakenfelde, Lichtenberg...)"),
+        ("inberlinwohnen.de", "3",  "3",  "6",  "GESOBAU, STADT UND LAND, Berlinovo; bez WBS i z WBS"),
+        ("RAZEM",             "17", "29", "46", "~3 minuty calkowitego czasu"),
     ]
     for i, row in enumerate(main_rows):
         pdf.alt_table_row(list(row), widths_m, i)
@@ -603,6 +664,7 @@ def generate():
         ("start_run() / finish_run()",   "Rejestruje uruchomienie w tabeli scrape_runs"),
         ("print_stats()",                "Wypisuje liczby ogloszenia per zrodlo i ostatnie uruchomienia"),
         ("query_apartments(**filtry)",   "Zapytanie z filtrami: min_rooms, source, wbs_required"),
+        ("query_today_new()",             "Oferty z first_seen_at >= dzis UTC; uzywane przez dzienny raport"),
     ]
     for i, row in enumerate(db_funcs):
         pdf.alt_table_row(list(row), widths_dbf, i)
@@ -650,7 +712,18 @@ def generate():
         pdf.bullet(item)
     pdf.ln(2)
 
-    pdf.subsection_title("14.3  Przykladowy wyglad emaila")
+    pdf.subsection_title("14.3  Dzienny raport - send_daily_summary()")
+    pdf.body_text(
+        "Funkcja send_daily_summary(rows) wysyla zbiorczy email z WSZYSTKIMI ofertami "
+        "dodanymi dzisiaj (rows to lista sqlite3.Row z query_today_new()). "
+        "Uruchamiana przez GitHub Actions o 20:00 CEST (cron: 0 18 * * * UTC) "
+        "lub recznie przez workflow_dispatch z parametrem daily_summary=true. "
+        "Roznia sie od send(): temat emaila zawiera 'dzienny raport', naglowek emaila "
+        "ma ciemniejszy kolor (#1a252f vs #2c3e50), stopka zawiera informacje o porze generowania."
+    )
+    pdf.ln(2)
+
+    pdf.subsection_title("14.4  Przykladowy wyglad emaila")
     pdf.body_text("Ponizej przedstawiono przykladowy wyglad wiadomosci email dla 5 nowych ofert (2 bez WBS, 3 z WBS):")
     pdf.ln(1)
 
@@ -890,8 +963,11 @@ def generate():
 
     pdf.subsection_title("14.1  Harmonogram i architektura")
     pdf.body_text(
-        "Plik .github/workflows/scrape.yml definiuje workflow uruchamiany "
-        "automatycznie co 30 minut (cron) oraz recznie z poziomu GitHub UI. "
+        "Plik .github/workflows/scrape.yml definiuje dwa harmonogramy cron (UTC): "
+        "(1) co 30 minut w godzinach 7:00-19:30 CEST (cron: 0,30 5-17 * * *) - "
+        "uruchamia wszystkie scrapery i wysyla email jesli sa nowe oferty; "
+        "(2) codziennie o 20:00 CEST (cron: 0 18 * * *) - tryb --daily-summary: "
+        "odpytuje baze o wszystkie oferty dodane dzis i wysyla zbiorczy raport. "
         "Baza danych mieszkania.db jest sledzona przez git - po kazdym uruchomieniu "
         "bot commituje zaktualizowany plik z powrotem do repozytorium "
         "(commit message: 'chore: update DB [skip ci]' zapobiega petli triggerow)."
@@ -914,7 +990,7 @@ def generate():
         ("Ustaw Python 3.12",     "actions/setup-python@v5 z cache pip"),
         ("Zainstaluj zaleznosci", "pip install -r requirements.txt"),
         ("Playwright Chromium",   "playwright install chromium --with-deps"),
-        ("Uruchom scraper",       "python main.py MIN_ROOMS (sekrety SMTP z GitHub Secrets)"),
+        ("Uruchom scraper",       "python main.py MIN_ROOMS  LUB  python main.py MIN_ROOMS --daily-summary (cron 20:00)"),
         ("Statystyki bazy",       "python -c 'import db; db.init_db(); db.print_stats()'"),
         ("Zapisz DB do repo",     "git add mieszkania.db && git commit && git push (if: always())"),
     ]
@@ -972,16 +1048,16 @@ def generate():
         "pip install -r requirements.txt\n\n"
         "# 4. Pobranie przegladarki Chromium dla Playwright\n"
         "playwright install chromium\n\n"
-        "# 5. Uruchomienie wyszukiwarki (min. 5 pokoi)\n"
+        "# 5. Uruchomienie wyszukiwarki (min. 4 pokoje)\n"
         "python main.py\n\n"
         "# 6. Wyszukiwanie z innym progiem pokoi\n"
-        "python main.py 4"
+        "python main.py 5"
     )
     pdf.ln(2)
 
     pdf.subsection_title("14.3  Uruchomienie pojedynczego scrapera")
     pdf.code_block(
-        "python scrapers/degewo.py    # ~20 sek., Playwright\n"
+        "python scrapers/degewo.py    # ~8 sek.,  requests + BS4 (SSR)\n"
         "python scrapers/gewobag.py   # ~3 min,  WP API + Playwright\n"
         "python scrapers/wbm.py       # ~2 sek.,  requests + BS4\n"
         "python scrapers/howoge.py    # <1 sek.,  POST JSON API"
@@ -1002,6 +1078,362 @@ def generate():
         "# Zaleznosci deweloperskie (generowanie dokumentacji PDF)\n"
         "fpdf2==2.8.7"
     )
+
+    # -- 15. CHANGELOG ---------------------------------------------------------
+    pdf.section_title("15. Historia zmian")
+
+    pdf.subsection_title("15.1  Zmiana 2 - Zmiana progu pokoi (MIN_ROOMS: 5 -> 4)")
+    pdf.body_text(
+        "Na zadanie uzytkownika zmieniono minimalny prog liczby pokoi z 5 na 4 "
+        "we wszystkich scraperach i orchestratorze. Zmiany objely stale MIN_ROOMS "
+        "w plikach degewo.py, gewobag.py oraz domyslne argumenty funkcji scrape() "
+        "w howoge.py i wbm.py, a takze zmienna MIN_ROOMS = 4.0 w main.py. "
+        "Zaktualizowano rowniez README.md i dokumentacje PDF."
+    )
+    pdf.ln(2)
+
+    pdf.subsection_title("15.2  Zmiana 1 - Przepisanie scrapera degewo.py")
+    pdf.body_text(
+        "W trakcie automatycznego testu wszystkich scraperow wykryto, ze scraper "
+        "degewo.de zwraca 0 wynikow. Analiza wykazala, ze portal degewo.de przeszedl "
+        "pelny redesign interfejsu uzytkownika - zmieniona zostala struktura HTML "
+        "i klasy CSS elementow. Poprzedni scraper uzyl Playwright (headless Chromium) "
+        "do renderowania JS, jednak po redesignie strona jest w pelni SSR "
+        "(server-side rendered) i Playwright nie jest juz potrzebny."
+    )
+    pdf.ln(2)
+
+    pdf.subsection_title("15.3  Lista plikow projektu - status zmian")
+    widths_ch = [72, 28, 70]
+    pdf.table_row(["Plik", "Status", "Uwagi"], widths_ch, header=True)
+    changelog_files = [
+        ("scrapers/degewo.py",         "ZMIENIONY",    "Przepisanie logiki + MIN_ROOMS 5->4"),
+        ("scrapers/gewobag.py",        "ZMIENIONY",    "MIN_ROOMS 5->4"),
+        ("scrapers/wbm.py",            "ZMIENIONY",    "Domyslny parametr min_rooms 5->4"),
+        ("scrapers/howoge.py",         "ZMIENIONY",    "Domyslny parametr min_rooms 5->4"),
+        ("scrapers/inberlinwohnen.py", "BEZ ZMIAN",    "Domyslny min_rooms=1.0 (bez zmian)"),
+        ("scrapers/__init__.py",       "BEZ ZMIAN",    "-"),
+        ("main.py",                    "ZMIENIONY",    "MIN_ROOMS 5.0->4.0"),
+        ("models.py",                  "BEZ ZMIAN",    "Klasa Apartment bez zmian"),
+        ("db.py",                      "BEZ ZMIAN",    "Baza danych bez zmian"),
+        ("notify.py",                  "BEZ ZMIAN",    "Powiadomienia email bez zmian"),
+        ("generate_docs.py",           "ZMIENIONY",    "Aktualizacja dokumentacji (ta wersja)"),
+        ("explain_degewo.py",          "ZMIENIONY",    "Aktualizacja opisu kodu degewo.py"),
+        ("explain_degewo.pdf",         "WYGENEROWANY", "Nowy PDF z aktualnym opisem degewo"),
+        ("dokumentacja.pdf",           "WYGENEROWANY", "Nowy PDF z aktualnym opisem projektu"),
+        ("requirements.txt",           "BEZ ZMIAN",    "playwright pozostaje (potrzebny gewobag)"),
+        (".github/workflows/scrape.yml","BEZ ZMIAN",   "GitHub Actions bez zmian"),
+        (".env.example",               "BEZ ZMIAN",    "-"),
+        (".gitignore",                 "BEZ ZMIAN",    "-"),
+        ("README.md",                  "ZMIENIONY",    "MIN_ROOMS=5 -> MIN_ROOMS=4"),
+    ]
+    for i, row in enumerate(changelog_files):
+        status = row[1]
+        if status == "ZMIENIONY":
+            bg = (255, 243, 205) if i % 2 == 0 else (255, 236, 179)
+        elif status == "WYGENEROWANY":
+            bg = (209, 236, 241) if i % 2 == 0 else (190, 229, 235)
+        else:
+            bg = (245, 248, 255) if i % 2 == 0 else (255, 255, 255)
+        bold = status != "BEZ ZMIAN"
+        # Oblicz wysokosc wiersza
+        pdf.set_font("Helvetica", "", 8)
+        max_lines = 1
+        for col, w in zip(row, widths_ch):
+            cur_w, lines = 0, 1
+            for word in str(col).split():
+                ww = pdf.get_string_width(word + " ")
+                if cur_w > 0 and cur_w + ww > w - 2:
+                    lines += 1
+                    cur_w = ww
+                else:
+                    cur_w += ww
+            max_lines = max(max_lines, lines)
+        row_h = max_lines * 6.5 + 1
+        if pdf.get_y() + row_h > pdf.page_break_trigger:
+            pdf.add_page()
+        x0, y0 = pdf.l_margin, pdf.get_y()
+        pdf.set_fill_color(*bg)
+        # Kol 1: sciezka pliku (72mm)
+        pdf.set_font("Helvetica", "", 8)
+        pdf.rect(x0, y0, 72, row_h, "FD")
+        pdf.set_xy(x0 + 1, y0 + 1)
+        pdf.multi_cell(70, 6.5, row[0], border=0, fill=False,
+                       new_x=XPos.LMARGIN, new_y=YPos.NEXT)
+        # Kol 2: status (28mm)
+        pdf.set_font("Helvetica", "B" if bold else "", 8)
+        pdf.set_fill_color(*bg)
+        pdf.rect(x0 + 72, y0, 28, row_h, "FD")
+        pdf.set_xy(x0 + 73, y0 + 1)
+        pdf.multi_cell(26, 6.5, status, border=0, fill=False, align="C",
+                       new_x=XPos.LMARGIN, new_y=YPos.NEXT)
+        # Kol 3: uwagi (70mm)
+        pdf.set_font("Helvetica", "", 8)
+        pdf.set_fill_color(*bg)
+        pdf.rect(x0 + 100, y0, 70, row_h, "FD")
+        pdf.set_xy(x0 + 101, y0 + 1)
+        pdf.multi_cell(68, 6.5, row[2], border=0, fill=False,
+                       new_x=XPos.LMARGIN, new_y=YPos.NEXT)
+        pdf.set_xy(x0, y0 + row_h)
+    pdf.set_fill_color(255, 255, 255)
+    pdf.ln(4)
+
+    pdf.subsection_title("15.4  Szczegoly zmian w scrapers/degewo.py")
+    widths_diff = [55, 115]
+    pdf.table_row(["Aspekt", "Zmiana (stara -> nowa)"], widths_diff, header=True)
+    diff_rows = [
+        ("Metoda HTTP",       "async Playwright (headless Chromium) -> requests.get() (sync)"),
+        ("Import playwright", "playwright.async_api -> USUNIETY"),
+        ("Import asyncio",    "asyncio -> USUNIETY"),
+        ("Import time",       "brak -> DODANY (time.sleep 0.5s miedzy stronami)"),
+        ("Import requests",   "brak -> DODANY"),
+        ("Selektor kart",     "article.article-list__item--immosearch -> div.c-teaser.c-teaser--apartment"),
+        ("Parsowanie danych", "regex z text_full -> strukturalne dt/dd z c-definition-list"),
+        ("Adres/dzielnica",   "span.article__meta -> div.c-copy > p"),
+        ("Tytul",             "h2.article__title -> h3.c-headline a"),
+        ("Paginacja",         "klik JS a.pager__next -> GET URL z a[href*='tx_openimmo_immobilie']"),
+        ("Funkcja",           "async def scrape_degewo -> def scrape_degewo (sync)"),
+        ("Wykrywanie WBS",    "Dodano obsluge 'ohne WBS' -> wbs_required=False"),
+        ("Czas wykonania",    "~20 sek. (Playwright launch) -> ~8 sek. (requests)"),
+    ]
+    for i, row in enumerate(diff_rows):
+        pdf.alt_table_row(list(row), widths_diff, i)
+    pdf.ln(4)
+
+    pdf.subsection_title("15.5  Weryfikacja po zmianie")
+    pdf.body_text(
+        "Po przepisaniu scrapera uruchomiono testy wszystkich 5 scraperow "
+        "(16.06.2026). Wyniki:"
+    )
+    widths_v = [38, 18, 18, 96]
+    pdf.table_row(["Scraper", "Status", "Wynikow", "Uwagi"], widths_v, header=True)
+    verify_rows = [
+        ("degewo",         "OK", "47",   "6 stron, requests+BS4, ~10 sek."),
+        ("gewobag",        "OK", "49",   "WP API + Playwright, ~2 min; 4 oferty Auf Anfrage (2 z fallbackiem tytulu)"),
+        ("wbm",            "OK", "7",    "requests+BS4, 1 strona"),
+        ("howoge",         "OK", "31",   "POST JSON API, ~2 sek."),
+        ("inberlinwohnen", "OK", "50",   "25 stron (GESOBAU+STADTUNDLAND+Berlinovo)"),
+    ]
+    v_widths = [38, 18, 18, 96]
+    for i, row in enumerate(verify_rows):
+        bg = (209, 236, 209) if i % 2 == 0 else (220, 245, 220)
+        pdf.set_fill_color(*bg)
+        pdf.set_font("Helvetica", "", 8)
+        x0, y0 = pdf.l_margin, pdf.get_y()
+        max_lines = 1
+        for val, w in zip(row, v_widths):
+            cur_w, lines = 0, 1
+            for word in str(val).split():
+                ww = pdf.get_string_width(word + " ")
+                if cur_w > 0 and cur_w + ww > w - 2:
+                    lines += 1
+                    cur_w = ww
+                else:
+                    cur_w += ww
+            max_lines = max(max_lines, lines)
+        row_h = max_lines * 6.5 + 1
+        if pdf.get_y() + row_h > pdf.page_break_trigger:
+            pdf.add_page()
+        x0, y0 = pdf.l_margin, pdf.get_y()
+        x = x0
+        for val, w in zip(row, v_widths):
+            pdf.rect(x, y0, w, row_h, "FD")
+            pdf.set_xy(x + 1, y0 + 1)
+            pdf.multi_cell(w - 2, 6.5, str(val), border=0, fill=False,
+                           new_x=XPos.LMARGIN, new_y=YPos.NEXT)
+            x += w
+        pdf.set_xy(x0, y0 + row_h)
+    pdf.set_fill_color(255, 255, 255)
+    pdf.ln(4)
+
+    # -- 16. OSTRZEZENIA O NIEDZIAJACYCH SCRAPERACH ----------------------------
+    pdf.add_page()
+    pdf.section_title("16. Nowa funkcjonalnosc: ostrzezenia w dziennym raporcie (26.05.2026)")
+
+    pdf.subsection_title("16.1  Motywacja")
+    pdf.body_text(
+        "Dotychczas dzienny raport (--daily-summary, 20:00 CEST) informowal tylko "
+        "o ofertach dodanych danego dnia. Jezeli scraper dla jakiegos portalu nie "
+        "dzialal (np. zmiana struktury strony, HTTP 500, blokada IP), email w ogole "
+        "nie informowal o tym fakcie. Uzytkownik nie mial mozliwosci stwierdzenia, "
+        "czy brak nowych ofert wynika z braku dostepnych mieszkan, czy z awarii scrapera.\n\n"
+        "Rozwiazanie: dzienny raport zawiera teraz czerwony blok ostrzegawczy jezeli "
+        "jakikolwiek portal nie mial ZADNEJ nowej oferty od ponad 3 dni."
+    )
+
+    pdf.subsection_title("16.2  Zmienione i nowe pliki")
+    widths_ch2 = [52, 26, 92]
+    pdf.table_row(["Plik", "Status", "Zmiana"], widths_ch2, header=True)
+    new_files = [
+        ("db.py",          "ZMIENIONY", "Nowa funkcja query_stale_sources(days=3), nowy import timedelta"),
+        ("notify.py",      "ZMIENIONY", "Nowa funkcja _stale_warnings_html(), rozszerzony send_daily_summary(stale_warnings)"),
+        ("main.py",        "ZMIENIONY", "Blok --daily-summary wywoluje query_stale_sources i przekazuje do send_daily_summary"),
+        ("README.md",      "ZMIENIONY", "Sekcja 'Daily summary' uzupelniona o opis mechanizmu ostrzezen"),
+        ("explain_db.pdf",    "WYGENEROWANY", "Nowy rozdzial 13: query_stale_sources()"),
+        ("explain_notify.pdf","WYGENEROWANY", "Nowe rozdzialy 12-13: _stale_warnings_html, send_daily_summary"),
+        ("explain_main.pdf",  "WYGENEROWANY", "Nowe rozdzialy 14-15: --daily-summary + schemat przeplywu"),
+        ("dokumentacja.pdf",  "WYGENEROWANY", "Nowa sekcja 16 (ta sekcja)"),
+    ]
+    for i, row in enumerate(new_files):
+        status = row[1]
+        if status == "ZMIENIONY":
+            bg = (255, 243, 205) if i % 2 == 0 else (255, 236, 179)
+        else:
+            bg = (209, 236, 241) if i % 2 == 0 else (190, 229, 235)
+        pdf.set_fill_color(*bg)
+        pdf.set_font("Helvetica", "", 8)
+        max_lines = 1
+        for col, w in zip(row, widths_ch2):
+            cur_w, lines = 0, 1
+            for word in str(col).split():
+                ww = pdf.get_string_width(word + " ")
+                if cur_w > 0 and cur_w + ww > w - 2:
+                    lines += 1
+                    cur_w = ww
+                else:
+                    cur_w += ww
+            max_lines = max(max_lines, lines)
+        row_h = max_lines * 6.5 + 1
+        if pdf.get_y() + row_h > pdf.page_break_trigger:
+            pdf.add_page()
+        x0, y0 = pdf.l_margin, pdf.get_y()
+        x = x0
+        for col, w in zip(row, widths_ch2):
+            pdf.rect(x, y0, w, row_h, "FD")
+            pdf.set_xy(x + 1, y0 + 1)
+            pdf.multi_cell(w - 2, 6.5, str(col), border=0, fill=False,
+                           new_x=XPos.LMARGIN, new_y=YPos.NEXT)
+            x += w
+        pdf.set_xy(x0, y0 + row_h)
+    pdf.set_fill_color(255, 255, 255)
+    pdf.ln(4)
+
+    pdf.subsection_title("16.3  db.query_stale_sources(days=3)")
+    pdf.body_text(
+        "Nowa funkcja w db.py. Zapytanie SQL grupuje oferty po zrodle i bierze "
+        "MAX(first_seen_at) per portal. Jesli ta data jest starsza niz 'days' dni "
+        "(domyslnie 3), portal traktowany jest jako 'cichy' i trafia do listy wynikowej.\n\n"
+        "Zwracany format: list[dict] z kluczami source, last_new (YYYY-MM-DD), days_ago (int). "
+        "Lista posortowana malejaco po days_ago (najdluzej cichy portal - pierwszy)."
+    )
+    pdf.code_block(
+        "cutoff = (datetime.now(timezone.utc) - timedelta(days=3)).isoformat()\n"
+        "SELECT source, MAX(first_seen_at) AS last_new\n"
+        "FROM apartments\n"
+        "GROUP BY source\n"
+        "HAVING last_new < cutoff"
+    )
+
+    pdf.subsection_title("16.4  notify._stale_warnings_html(warnings)")
+    pdf.body_text(
+        "Prywatna funkcja generujaca blok HTML z czerwonym tlem (#fdecea). "
+        "Zwraca pusty string gdy lista warnings jest pusta (brak bloku w emailu). "
+        "Blok zawiera naglowek, opis slowny i tabele 3 kolumny: Portal | Ostatnia nowa oferta | Dni temu."
+    )
+
+    pdf.subsection_title("16.5  notify.send_daily_summary() - rozszerzone API")
+    pdf.body_text(
+        "Funkcja otrzymala nowy opcjonalny parametr stale_warnings: list[dict] | None = None.\n\n"
+        "Kluczowe zmiany zachowania:\n"
+        "  - Email wysylany jesli sa oferty LUB sa ostrzezenia (poprzednio: tylko gdy sa oferty)\n"
+        "  - Temat emaila zmienia sie na 'ostrzezenia scraperow (N)' gdy brak ofert ale sa ostrzezenia\n"
+        "  - Blok ostrzegawczy HTML pojawia sie PRZED tabelami ofert\n"
+        "  - Wersja tekstowa (plaintext) rowniez zawiera sekcje ostrzezen"
+    )
+
+    pdf.subsection_title("16.6  Scenariusze dzialania")
+    pdf.body_text(
+        "a) Normalne dzialanie (scrapy OK, sa nowe oferty):\n"
+        "   -> rows=N ofert, stale=[]  -> standardowy email z ofertami, bez bloku ostrzezenia\n\n"
+        "b) Brak nowych ofert (scrapy OK, portale nie dodaly nic):\n"
+        "   -> rows=[], stale=[]  -> email nie jest wysylany\n\n"
+        "c) Scraper nie dzialal (portal ciche od >3 dni):\n"
+        "   -> rows=[], stale=[degewo, ...]  -> email z czerwonym blokiem ostrzezenia, bez tabel ofert\n\n"
+        "d) Mieszany (sa nowe oferty + jeden portal ciche):\n"
+        "   -> rows=N, stale=[wbm]  -> email z blokiem ostrzezenia NA GORZE, potem tabele ofert"
+    )
+
+    # -- 17. POPRAWKA GEWOBAG - ROOMS FALLBACK ---------------------------------
+    pdf.add_page()
+    pdf.section_title("17. Poprawka: gewobag - fallback liczby pokoi z tytulu (16.06.2026)")
+
+    pdf.subsection_title("17.1  Problem")
+    pdf.body_text(
+        "Czesc ofert gewobag.de wyswietla 'Auf Anfrage' (na zapytanie) we wszystkich "
+        "polach danych - cena, metraz, adres, liczba pokoi sa celowo ukryte przez "
+        "wynajmujacego. Playwright pobiera strone szczegolow, ale tabela nie zawiera "
+        "wiersza 'Anzahl Zimmer', przez co obiekt Apartment ma rooms=None."
+    )
+    for item in [
+        "4 oferty spelnialy ten warunek (rooms=None, area=None, warm_rent=None, address='')",
+        "Tytuly ofert zawieraja liczbe pokoi: np. '1 Zimmerwohnung ab sofort'",
+        "Rozwiazanie: nowa funkcja _rooms_from_title(title) jako fallback",
+    ]:
+        pdf.bullet(item)
+    pdf.ln(2)
+
+    pdf.subsection_title("17.2  Nowa funkcja _rooms_from_title()")
+    pdf.code_block(
+        "def _rooms_from_title(title: str) -> Optional[float]:\n"
+        "    \"\"\"\n"
+        "    Fallback: wyciaga liczbe pokoi z tytulu gdy strona szczegolow nie podaje danych.\n"
+        "    Obsluguje: '1 Zimmerwohnung', '2-Zimmer', '3,5 Zimmer' itd.\n"
+        "    \"\"\"\n"
+        "    m = re.search(r'(\\d+(?:[,\\.]\\d+)?)\\s*[-\\u2013]?\\s*Zimmer', title, re.IGNORECASE)\n"
+        "    if m:\n"
+        "        try:\n"
+        "            return float(m.group(1).replace(',', '.'))\n"
+        "        except ValueError:\n"
+        "            pass\n"
+        "    return None"
+    )
+    pdf.ln(2)
+
+    pdf.subsection_title("17.3  Uzywanie fallbacku w scrape_gewobag()")
+    pdf.code_block(
+        "rooms = details.get('rooms')  # z tabeli Playwright\n\n"
+        "# Fallback: wyciagnij liczbe pokoi z tytulu (np. dla ofert 'Auf Anfrage')\n"
+        "if rooms is None:\n"
+        "    rooms = _rooms_from_title(entry['title'])"
+    )
+
+    pdf.subsection_title("17.4  Wynik")
+    pdf.body_text(
+        "Z 4 ofert z rooms=None poprawka naprawila 2 (typy: '1 Zimmerwohnung...'). "
+        "Pozostale 2 maja tytuly bez slowa 'Zimmer' - nie ma z czego odczytac. "
+        "Sa one jednak nadal wlaczone do wynikow (rooms=None), poniewaz moga byc "
+        "ofertami WBS wymagajacymi recznej weryfikacji."
+    )
+    pdf.ln(2)
+
+    pdf.subsection_title("17.5  Zmienione pliki")
+    widths_ch3 = [52, 26, 92]
+    pdf.table_row(["Plik", "Status", "Zmiana"], widths_ch3, header=True)
+    fix_files = [
+        ("scrapers/gewobag.py", "ZMIENIONY", "Nowa funkcja _rooms_from_title(); fallback w scrape_gewobag()"),
+        ("README.md",           "ZMIENIONY", "Changelog 16.06.2026; poprawki degewo method; usunieto duplikat"),
+        ("dokumentacja.pdf",   "WYGENEROWANY", "Nowa sekcja 17 (ta sekcja)"),
+    ]
+    for i, row in enumerate(fix_files):
+        status = row[1]
+        if status == "ZMIENIONY":
+            bg = (255, 243, 205) if i % 2 == 0 else (255, 236, 179)
+        else:
+            bg = (209, 236, 241)
+        pdf.set_fill_color(*bg)
+        pdf.set_font("Helvetica", "", 8)
+        row_h = 7.5
+        if pdf.get_y() + row_h > pdf.page_break_trigger:
+            pdf.add_page()
+        x0, y0 = pdf.l_margin, pdf.get_y()
+        for col, w in zip(row, widths_ch3):
+            pdf.rect(x0 + sum(widths_ch3[:list(row).index(col)]), y0, w, row_h, "FD")
+            pdf.set_xy(x0 + sum(widths_ch3[:list(row).index(col)]) + 1, y0 + 1)
+            pdf.multi_cell(w - 2, 6.5, col, border=0, fill=False,
+                           new_x=XPos.LMARGIN, new_y=YPos.NEXT)
+        pdf.set_xy(x0, y0 + row_h)
+    pdf.set_fill_color(255, 255, 255)
+    pdf.ln(4)
 
     # -- ZAPIS -----------------------------------------------------------------
     out_path = r"d:\privat\mieszkanie\Wyszukiwanie\dokumentacja.pdf"
