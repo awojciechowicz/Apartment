@@ -76,7 +76,7 @@ def _apt_row(apt: Apartment, idx: int) -> str:
 def _section_table(apts: list[Apartment], title: str, header_color: str) -> str:
     if not apts:
         return ""
-    sorted_apts = sorted(apts, key=lambda a: (a.source, -(a.rooms or 0)))
+    sorted_apts = sorted(apts, key=lambda a: (a.rooms is not None, -(a.rooms or 0)))
     rows = "".join(_apt_row(apt, i) for i, apt in enumerate(sorted_apts))
     return f"""
       <h2 style="margin:24px 0 8px;font-size:15px;color:{header_color};
