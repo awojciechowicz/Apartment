@@ -111,8 +111,8 @@ def _parse_page(soup: BeautifulSoup, min_rooms: float) -> list[Apartment]:
             elif "frei ab" in label:
                 available = value
 
-        # Filtr – tylko >= min_rooms pokoi
-        if rooms is None or rooms < min_rooms:
+        # Filtr – tylko >= min_rooms pokoi (rooms=None przepuszczamy – dane niekompletne)
+        if rooms is not None and rooms < min_rooms:
             continue
 
         # WBS – z tytułu i całego tekstu karty

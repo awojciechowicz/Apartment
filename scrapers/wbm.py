@@ -96,8 +96,6 @@ def _parse_page(soup: BeautifulSoup) -> list[Apartment]:
         m = re.search(r"WBS\s*([\d/]+)", title)
         if m:
             wbs_type = f"WBS {m.group(1)}"
-        elif wbs_required:
-            wbs_type = "WBS (typ nieznany)"
 
         # --- URL ---
         link_tag = card.select_one("a.immo-button-cta")
